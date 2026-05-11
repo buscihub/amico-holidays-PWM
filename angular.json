@@ -18,7 +18,11 @@
           "builder": "@angular/build:application",
           "options": {
             "browser": "src/main.ts",
+            "prerender": false,
+            "index": "src/index.html",
             "tsConfig": "tsconfig.app.json",
+            "outputPath": "dist/amicosHolydays",
+            "externalDependencies": ["sqlite3"],
             "assets": [
               {
                 "glob": "**/*",

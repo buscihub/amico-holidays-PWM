@@ -17,6 +17,8 @@
         "build": {
           "builder": "@angular/build:application",
           "options": {
+            "externalDependencies": ["sqlite3"],
+            "prerender":false,
             "browser": "src/main.ts",
             "prerender": false,
             "index": "src/index.html",

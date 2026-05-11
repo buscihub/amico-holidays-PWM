@@ -15,7 +15,6 @@ const browserDistFolder = join(import.meta.dirname, '../browser');
 
 const app = express();
 app.use(express.json());
-initDb();
 const angularApp = new AngularNodeAppEngine();
 
 // AGGIUNTO ": any" QUI per risolvere l'errore TS(7030)

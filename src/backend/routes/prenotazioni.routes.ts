@@ -1,15 +1,15 @@
 import { Router } from 'express';
-import { registraCliente } from '../controllers/prenotazioni.controllers';
+import { aggiungiSoggiorno, modificaSoggiorno, rimuoviSoggiorno } from '../controllers/prenotazioni.controllers';
 
 const router = Router();
 
-// POST /apo/prenotazioni/:id - Aggiunta di un soggiorno
-router.post('/registra-cliente', registraCliente);
+// POST /api/prenotazioni/ - Prenotazione sul sito
+router.post('/aggiungi-soggiorno', aggiungiSoggiorno);
 
 // PUT /api/prenotazioni/:id - Modifica di un soggiorno
-router.put('/:id', /* authMiddleware, */ updatePrenotazione);
+router.put('/:id', modificaSoggiorno);
 
 // DELETE /api/prenotazioni/:id - Cancellazione di un soggiorno
-router.delete('/:id', /* authMiddleware, */ deletePrenotazione);
+router.delete('/:id', rimuoviSoggiorno);
 
 export const prenotazioniRoutes = router;

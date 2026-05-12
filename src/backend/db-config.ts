@@ -55,7 +55,7 @@ export const initDb = () => {
       },
     );
 
-    // Tabella SOGGIORNI_SINCRONIZZATI
+    // Tabella SOGGIORNI
     db.run(`CREATE TABLE IF NOT EXISTS SOGGIORNI (
               id_soggiorno INTEGER PRIMARY KEY AUTOINCREMENT,
               id_alloggio INTEGER,

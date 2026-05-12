@@ -1,4 +1,4 @@
-import sqlite3 from 'sqlite3';
+import sqlite3, { Database } from 'sqlite3';
 import path from 'path';
 
 let db: sqlite3.Database;
@@ -67,4 +67,9 @@ db.serialize(() => {
 });
 }
 
-export const getDb = () => db;
+export const getDb = (): Database => {
+  if(!db){
+    throw new Error('⚠️ ERRORE CRITICO: Il database non è stato ancora inizializzato! Assicurati che initDb() sia stato eseguito prima di chiamare getDb().')
+  }
+  return db
+};

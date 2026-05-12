@@ -2,49 +2,56 @@ import { Request, Response } from 'express';
 import { getDb } from '../db-config'; // Assicurati che il percorso sia corretto
 import { RunResult } from 'sqlite3';
 
-// POST /api/prenotazioni/ - Aggiunzione manuale di un soggiorno
+// POST /api/prenotazioni/ - Inserimento manuale di un nuovo soggiorno e relativo cliente
 export const aggiungiSoggiorno = (req: Request, res: Response): any => {
   const db = getDb();
 
+  // DESTRUTTURAZIONE: Estraiamo i dati inviati dal frontend dal corpo della richiesta (body)
   const { id_alloggio, data_check_in, data_check_out, sesso, cittadinanza, luogo_residenza } =
     req.body;
 
-  // 1. Validazione dati in ingresso
+  // 1. VALIDAZIONE PRESENZA DATI: Controllo di sicurezza per evitare l'inserimento di campi nulli obbligatori
   if (!id_alloggio || !data_check_in || !data_check_out) {
     return res.status(400).json({ error: 'Dati mancanti. Impossibile procedere.' });
   }
 
+  // CONVERSIONE DATE: Trasformiamo le stringhe ISO in oggetti Date per manipolarle a livello logico
   const fine = new Date(data_check_out);
   const inizio = new Date(data_check_in);
 
+  // VALIDAZIONE FORMATO: Verifichiamo che le stringhe ricevute siano effettivamente date valide
   if (isNaN(inizio.getTime()) || isNaN(fine.getTime())) {
     return res.status(400).json({ error: 'Formato data non valido.' });
   }
 
+  // CONTROLLO TEMPORALE: Impediamo prenotazioni retroattive (check-in nel passato)
   const oggi = new Date();
-  oggi.setHours(0, 0, 0, 0);
+  oggi.setHours(0, 0, 0, 0); // Azzeriamo l'ora per confrontare solo il giorno
   if (inizio < oggi) {
     return res.status(400).json({ error: 'Non puoi effettuare un check-in nel passato!' });
   }
 
-  // 2. Calcolo permanenza in notti
+  // 2. CALCOLO LOGICO PERMANENZA: Determiniamo il numero di notti tramite la differenza temporale
   const diffInMs = fine.getTime() - inizio.getTime();
   const permanenza = Math.ceil(diffInMs / (1000 * 60 * 60 * 24));
 
+  // COERENZA DATE: La data di uscita deve essere logicamente successiva a quella di entrata
   if (permanenza <= 0) {
     return res
       .status(400)
       .json({ error: 'La data di check-out deve essere successiva al check-in.' });
   }
 
+  // BUSINESS RULE: Vincolo commerciale del B&B (soggiorno minimo di 2 notti)
   if (permanenza < 2) {
     return res.status(400).json({ error: 'Bisogna prenotare almeno per 2 notti' });
   }
 
-  // 3. Inizio Transazione SQL per garantire l'integrità dei dati
+  // 3. TRANSAZIONE ATOMICA: Avviamo una transazione SQL. 
+  // Questo assicura che se il salvataggio del Cliente fallisce, venga annullato anche il Soggiorno (niente dati orfani).
   db.run('BEGIN TRANSACTION;');
 
-  // Nome della tabella corretto in base alla tua inizializzazione (SOGGIORNI)
+  // QUERY SOGGIORNO: Prepariamo l'inserimento nella tabella principale
   const sqlSoggiorno = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente) VALUES (?, ?, ?, 'PrenotazioneSito')`;
 
   db.run(
@@ -52,28 +59,30 @@ export const aggiungiSoggiorno = (req: Request, res: Response): any => {
     [id_alloggio, data_check_in, data_check_out],
     function (this: RunResult, err: Error | null): any {
       if (err) {
-        // Se l'inserimento del soggiorno fallisce, si annulla la transazione
+        // GESTIONE ERRORE: Se il primo insert fallisce, facciamo il ROLLBACK per sicurezza
         db.run('ROLLBACK;');
         return res.status(500).json({ error: 'Errore salvataggio soggiorno: ' + err.message });
       }
 
-      // this.lastID contiene l'id_soggiorno appena generato dal database
+      // RECUPERO ID GENERATO: Otteniamo l'ID del soggiorno appena creato (Primary Key) 
+      // per collegarlo come Foreign Key nella tabella CLIENTE.
       const nuovoIdSoggiorno = this.lastID;
       const sqlCliente = `INSERT INTO CLIENTE (id_soggiorno, sesso, cittadinanza, luogo_residenza, permanenza) VALUES (?, ?, ?, ?, ?)`;
 
+      // QUERY CLIENTE: Inseriamo i dati anagrafici e la permanenza calcolata
       db.run(
         sqlCliente,
         [nuovoIdSoggiorno, sesso, cittadinanza, luogo_residenza, permanenza],
         (errCliente: Error | null): any => {
           if (errCliente) {
-            // Se l'inserimento del cliente fallisce, si annulla TUTTO (elimina in automatico anche il soggiorno appena creato)
+            // INTEGRITÀ DEI DATI: Se il cliente fallisce, annulliamo anche la creazione del soggiorno precedente
             db.run('ROLLBACK;');
             return res
               .status(500)
               .json({ error: 'Errore salvataggio cliente: ' + errCliente.message });
           }
 
-          // Se entrambi gli inserimenti sono andati a buon fine, salviamo definitivamente
+          // FINALIZZAZIONE: Tutto è andato a buon fine, scriviamo definitivamente le modifiche sul database
           db.run('COMMIT;');
 
           return res.status(200).json({

@@ -33,6 +33,7 @@
     "@angular/cli": "^21.2.10",
     "@angular/compiler-cli": "^21.2.0",
     "@ionic/angular-toolkit": "latest",
+    "@types/bcrypt": "^6.0.0",
     "@types/express": "^5.0.1",
     "@types/node": "^20.17.19",
     "@types/sqlite3": "^3.1.11",

@@ -10,6 +10,7 @@ import { join } from 'node:path';
 
 // IMPORTIAMO LE NOSTRE ROTTE
 import { prenotazioniRoutes } from './backend/routes/prenotazioni.routes';
+import { alloggiRoutes } from './backend/routes/alloggi.routes';
 
 const browserDistFolder = join(import.meta.dirname, '../browser');
 
@@ -23,7 +24,7 @@ const angularApp = new AngularNodeAppEngine();
 // Quindi intercetterà: POST /api/registra-cliente
 // ==========================================
 app.use('/api', prenotazioniRoutes);
-
+app.use('/api', alloggiRoutes);
 
 // Gestione Angular SSR e file statici
 app.use(

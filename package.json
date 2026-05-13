@@ -24,6 +24,8 @@
     "@angular/ssr": "^21.2.10",
     "@ionic/angular": "^8.8.6",
     "express": "^5.1.0",
+    "node-cron": "^4.2.1",
+    "node-ical": "^0.26.1",
     "rxjs": "~7.8.0",
     "sqlite3": "^6.0.1",
     "tslib": "^2.3.0"

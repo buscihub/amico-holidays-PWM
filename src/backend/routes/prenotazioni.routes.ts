@@ -3,31 +3,42 @@ import {
   aggiungiSoggiorno, 
   modificaSoggiorno, 
   rimuoviSoggiorno, 
-  bloccaDate // <-- Aggiunto l'import del blocco date
+  bloccaDate,
+  getDashboardStats,
+  getSoggiorniAttivi,
+  getStatoPulizie,
+  aggiornaPulizie,
+  azionaCheckIn,
+  azionaCheckOut,
+  storicoPrenotazioni
 } from '../controllers/prenotazioni.controllers';
+import { getDb } from '../db-config';
 
 const router = Router();
 
-// ==========================================
-// ROTTE UTENTE (SITO PRENOTAZIONI)
-// ==========================================
+// --- Debug & Utility ---
+router.get('/lista', (req, res) => {
+  getDb().all('SELECT * FROM SOGGIORNI', [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    return res.json(rows);
+  });
+});
 
-// POST /api/prenotazioni/aggiungi-soggiorno - Nuova prenotazione dal sito
+// --- Operazioni Core Prenotazioni ---
 router.post('/aggiungi-soggiorno', aggiungiSoggiorno);
-
-
-// ==========================================
-// ROTTE GESTIONALE HOST (BACKOFFICE)
-// ==========================================
-
-// POST /api/prenotazioni/blocca-date - Chiude una struttura per manutenzione/uso privato
 router.post('/blocca-date', bloccaDate);
-
-// PUT /api/prenotazioni/:id - Modifica le date di un soggiorno esistente
 router.put('/:id', modificaSoggiorno);
-
-// DELETE /api/prenotazioni/:id - Cancella una prenotazione dal database
 router.delete('/:id', rimuoviSoggiorno);
 
+// --- Rotte Dati Dashboard ---
+router.get('/dashboard/stats', getDashboardStats);
+router.get('/soggiorni/attivi', getSoggiorniAttivi);
+router.get('/alloggi/stato-pulizie', getStatoPulizie);
+
+// --- Azioni Gestionali Host ---
+router.put('/alloggi/:id/pulizie', aggiornaPulizie);
+router.put('/:id/checkin', azionaCheckIn);
+router.put('/:id/checkout', azionaCheckOut);
+router.get('/storico/ricerca', storicoPrenotazioni);
 
 export const prenotazioniRoutes = router;

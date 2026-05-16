@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors'; // <-- FONDAMENTALE per far parlare Angular col Backend
 import { initDb } from './db-config'; 
 import { prenotazioniRoutes } from './routes/prenotazioni.routes';
+import { startSincJob } from './jobs/cron-jobs';
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.get('/', (req, res) => {
 const port = process.env['PORT'] || 4000;
 
 initDb(); // Popola il database coi link che abbiamo messo prima
+startSincJob()
 
 app.listen(port, () => {
   console.log(`🎧 API Server in ascolto sulla porta ${port}`);

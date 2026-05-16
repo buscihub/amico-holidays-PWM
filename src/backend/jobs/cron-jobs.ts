@@ -1,86 +1,123 @@
 import cron from 'node-cron';
 import { getDb } from '../db-config';
-import { Data } from '@angular/router';
-import { raw } from 'express';
 import ical from 'node-ical';
-import { link } from 'fs';
-// Qui importeremo le funzioni per scaricare e salvare i dati
 
-const formatDataDB = (data: Date): String => {
+/**
+ * Converte un oggetto Date nel formato YYYY-MM-DD richiesto da SQLite
+ * Risolve i bug nativi di JS: getMonth() (+1) e getPercentuale di getDate()
+ */
+const formatDataDB = (data: Date): string => {
   const anno = data.getFullYear();
-  const mese = data.getMonth();
-  const gg = data.getDay();
+  // padStart aggiunge lo zero iniziale se il mese o giorno è a una sola cifra (es: "06" invece di "6")
+  const mese = String(data.getMonth() + 1).padStart(2, '0');
+  const gg = String(data.getDate()).padStart(2, '0');
   return `${anno}-${mese}-${gg}`;
 };
 
-const startSincJob = (): any => {
+export const startSincJob = (): void => {
+  // Configurato per girare OGNI MINUTO durante i test (* * * * *)
   cron.schedule('* * * * *', (): any => {
-    // Segnalo l'avvio della scincronizzazione in console
-    console.log('--- Avvio Sincronizzazione iCal Airbnb ---', new Date().toLocaleString()); // data della sinc
-  });
+    console.log('\n--- 🔄 Avvio Sincronizzazione iCal Airbnb ---', new Date().toLocaleString());
 
-  const db = getDb();
+    const db = getDb();
 
-  // RECUPERO I LINK DAL DB
-  // query da inserire in db.all(query, variabili[], callback)
-  const sqlGetIcal = 'SELECT id_alloggio, link_ical FROM ALLOGGI WHERE link_ical IS NOT NULL';
+    // 1. RECUPERO I LINK DAL DB
+    const sqlGetIcal = 'SELECT id_alloggio, link_ical FROM ALLOGGIO WHERE link_ical IS NOT NULL';
 
-  db.all(sqlGetIcal, [], async (err: Error | null, rows: any[]) => {
-    if (err) {
-      console.error('Errore nel recupero dei link iCal:', err.message);
-      return;
-    }
-
-    for (const row of rows) {
-      // destrutturo row per assegnarlo alle variabili di interesse
-      const { id_alloggio, link_ical } = row;
-      console.log(`\nSincronizzazione Alloggio ID: ${id_alloggio}...`);
-
-      try {
-        // SCARICO E PARSO IL FILE .ICS
-        /* Questa variabile conterrà i dati del calendario per ogni alloggio */
-        const eventi = await ical.async.fromURL(row.link_ical);
-
-        // PULISCO LE VECCHIE PRENOTAZIONI
-        // elimino solo quelle che sono state fatte solo tramite airbnb dell'alloggio specifico
-        const sqlPulisci = `DELETE FROM SOGGIORNI WHERE id_alloggio = ? AND sorgente = 'PrenotazioneAirbnb'`;
-
-        db.run(sqlPulisci, [id_alloggio], (errPulisci: Error): any => {
-          if (errPulisci) {
-            console.error(
-              `Errore pulizia vecchi dati per alloggio ${id_alloggio}:`,
-              errPulisci.message,
-            );
-            return;
-          }
-        });
-
-        // AGGIORNAMENTO DEL CALENDARIO
-        // query per linserimento dei nuovi valori
-        const sqlInsert = `INSERT INSO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente) VALUES (?, ? , ?, 'PrenotazioneAirbnb')`;
-
-        // scorro tutti gli eventi del file iCal
-        for (const key in eventi) {
-          const evento = eventi[key];
-
-          // filtriamo gli eventi (VEVENT) dai metadati
-          if (evento?.type == 'VEVENT') {
-            const checkIn = formatDataDB(evento.start as Date);
-            const checkOut = formatDataDB(evento.end as Date);
-
-            db.run(sqlInsert, [id_alloggio, checkIn, checkOut], (errInsert: Error) => {
-              if (errInsert) {
-                console.error(`Errore inserimento data Airbnb (${checkIn}):`, errInsert.message);
-              }
-            });
-          }
-        }
-        console.log(`Alloggio ${id_alloggio} sincronizzato con successo!`);
-      } catch (error) {
-        // Questo catch cattura gli errori di download del link (es. se Airbnb è giù)
-        // Usiamo il try/catch DENTRO il ciclo così se fallisce Casa Pretoria, il ciclo continua con Massimo!
-        console.error(`Errore di rete/download per alloggio ${id_alloggio}:`, error);
+    db.all(sqlGetIcal, [], async (err: Error | null, rows: any[]) => {
+      if (err) {
+        console.error('❌ Errore nel recupero dei link iCal:', err.message);
+        return;
       }
-    }
+
+      // Ciclo asincrono per elaborare ogni alloggio in sequenza
+      for (const row of rows) {
+        const { id_alloggio, link_ical } = row;
+        console.log(`⏳ Sincronizzazione Alloggio ID: ${id_alloggio}...`);
+
+        try {
+          // 2. SCARICO E PARSO IL FILE .ICS DA AIRBNB
+          const eventi = await ical.async.fromURL(link_ical);
+
+          // 3. PULISCO LE VECCHIE PRENOTAZIONI AIRBNB (Evita duplicati storici)
+          const sqlPulisci = `DELETE FROM SOGGIORNI WHERE id_alloggio = ? AND sorgente = 'PrenotazioneAirbnb'`;
+
+          db.run(sqlPulisci, [id_alloggio], (errPulisci: Error | null) => {
+            if (errPulisci) {
+              console.error(
+                `❌ Errore pulizia vecchi dati alloggio ${id_alloggio}:`,
+                errPulisci.message,
+              );
+              return;
+            }
+
+            // 4. AGGIORNAMENTO DEL CALENDARIO (Inserimento nuovi blocchi)
+            // Corretto "INSO" con "INTO"
+            const sqlInsert = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente) VALUES (?, ?, ?, 'PrenotazioneAirbnb')`;
+
+            // Scorro tutti gli eventi presenti nel file iCal scaricato
+            for (const key in eventi) {
+              const evento = eventi[key];
+
+              // Filtriamo isolando solo gli eventi di tipo VEVENT (le prenotazioni effettive)
+              if (evento?.type === 'VEVENT' && evento.start && evento.end) {
+                const checkIn = formatDataDB(evento.start as Date);
+                const checkOut = formatDataDB(evento.end as Date);
+
+                // Leggiamo il testo descrittivo che ci manda Airbnb (es: "Airbnb - XYZ" oppure "AIRBNB_NOT_AVAILABLE")
+                const sommario = (evento.summary as string) || '';
+
+                // Trasformiamo tutto in minuscolo per evitare problemi di maiuscole/minuscole
+                const sommarioMinuscolo = sommario.toLowerCase();
+
+                // Di base per il DB è una prenotazione arrivata da Airbnb
+                let sorgenteReale = 'PrenotazioneAirbnb';
+
+                // Controlliamo se il testo contiene "not available" (copre sia con le parentesi che senza)
+                if (
+                  sommarioMinuscolo.includes('not available') ||
+                  sommarioMinuscolo.includes('airbnb_not_available')
+                ) {
+                  sorgenteReale = 'BloccatoAirbnb';
+                }
+
+                // 🔴 STAMPA DI CONTROLLO TEMPORANEA (Guarda il terminale!)
+                console.log(
+                  `[Alloggio ${id_alloggio}] Trovato blocco dal ${checkIn} al ${checkOut} - Testo Airbnb: "${sommario}"`,
+                );
+
+                // Se Airbnb ci dice che è un blocco manuale o non disponibile, cambiamo l'etichetta
+                if (
+                  sommario.includes('AIRBNB_NOT_AVAILABLE') ||
+                  sommario.includes('Not available')
+                ) {
+                  sorgenteReale = 'BloccatoAirbnb';
+                }
+
+                // Modifichiamo al volo la query per inserire la sorgente dinamica
+                const sqlInsertDinamico = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente) VALUES (?, ?, ?, ?)`;
+
+                db.run(
+                  sqlInsertDinamico,
+                  [id_alloggio, checkIn, checkOut, sorgenteReale],
+                  (errInsert: Error | null) => {
+                    if (errInsert) {
+                      console.error(
+                        `❌ Errore inserimento data Airbnb per alloggio ${id_alloggio} (${checkIn}):`,
+                        errInsert.message,
+                      );
+                    }
+                  },
+                );
+              }
+            }
+            console.log(`✅ Alloggio ${id_alloggio} sincronizzato con successo!`);
+          });
+        } catch (error) {
+          // Se un link fallisce (es. host ha inserito un URL errato), il catch lo blocca e il ciclo continua per gli altri alloggi
+          console.error(`❌ Errore di rete/download per alloggio ${id_alloggio}:`, error);
+        }
+      }
+    });
   });
 };

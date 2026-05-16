@@ -3,7 +3,7 @@ import path from 'path';
 
 let db: sqlite3.Database;
 
-export const initDb = () => { 
+export const initDb = () => {
   // 1. SCUDO: Evita che venga inizializzato due volte
   // (Presuppone che 'db' sia la tua variabile globale dichiarata fuori da questa funzione)
   if (db) {
@@ -48,14 +48,32 @@ export const initDb = () => {
               link_ical TEXT
           )`,
       () => {
-        // Popoliamo subito le tre stanze se non esistono
-        const stmt = db.prepare(`INSERT OR IGNORE INTO ALLOGGIO (nome_alloggio) VALUES (?)`);
-        ['Pretoria', 'Massimo', 'Cattedrale'].forEach((nome) => stmt.run(nome));
-        stmt.finalize();
+        // Dati di base del B&B (Seeding)
+        const alloggiData = [
+          { nome: 'Pretoria', link: 'https://www.airbnb.it/calendar/ical/1351449804460967040.ics?t=c5c9cc2fcd9d45828da2d7b558af5b46' },
+          { nome: 'Massimo', link: 'https://www.airbnb.it/calendar/ical/1351425467263385688.ics?t=ef631863d1094c499ee86b22b011b270' },
+          { nome: 'Cattedrale', link: 'https://www.airbnb.it/calendar/ical/1351363221212129968.ics?t=990ce98b3b4f4bcb8041853444263682' },
+        ];
+
+        // 1. Assicuriamoci che la stanza esista
+        const stmtInsert = db.prepare(`INSERT OR IGNORE INTO ALLOGGIO (nome_alloggio) VALUES (?)`);
+        // 2. Assicuriamoci che il link sia sempre aggiornato
+        const stmtUpdate = db.prepare(`UPDATE ALLOGGIO SET link_ical = ? WHERE nome_alloggio = ?`);
+
+        alloggiData.forEach((alloggio) => {
+          stmtInsert.run(alloggio.nome);
+          // Se il link non è vuoto, lo aggiorniamo
+          if (alloggio.link !== '') {
+            stmtUpdate.run(alloggio.link, alloggio.nome);
+          }
+        });
+
+        stmtInsert.finalize();
+        stmtUpdate.finalize();
       },
     );
 
-    // Tabella SOGGIORNI_SINCRONIZZATI
+    // Tabella SOGGIORNI
     db.run(`CREATE TABLE IF NOT EXISTS SOGGIORNI (
               id_soggiorno INTEGER PRIMARY KEY AUTOINCREMENT,
               id_alloggio INTEGER,
@@ -82,8 +100,10 @@ export const initDb = () => {
   });
 };
 export const getDb = (): Database => {
-  if(!db){
-    throw new Error('⚠️ ERRORE CRITICO: Il database non è stato ancora inizializzato! Assicurati che initDb() sia stato eseguito prima di chiamare getDb().')
+  if (!db) {
+    throw new Error(
+      '⚠️ ERRORE CRITICO: Il database non è stato ancora inizializzato! Assicurati che initDb() sia stato eseguito prima di chiamare getDb().',
+    );
   }
-  return db
+  return db;
 };

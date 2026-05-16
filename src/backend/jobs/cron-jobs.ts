@@ -44,7 +44,7 @@ const startSincJob = (): any => {
         // PULISCO LE VECCHIE PRENOTAZIONI
         // elimino solo quelle che sono state fatte solo tramite airbnb dell'alloggio specifico
         const sqlPulisci = `DELETE FROM SOGGIORNI WHERE id_alloggio = ? AND sorgente = 'PrenotazioneAirbnb'`;
-
+        
         db.run(sqlPulisci, [id_alloggio], (errPulisci: Error): any => {
           if (errPulisci) {
             console.error(

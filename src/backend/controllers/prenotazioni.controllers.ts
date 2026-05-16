@@ -33,14 +33,14 @@ export const aggiungiSoggiorno = (req: Request, res: Response): any => {
 
   const sqlCheck = `SELECT id_soggiorno FROM SOGGIORNI WHERE id_alloggio = ? AND data_check_in < ? AND data_check_out > ?`;
 
-  db.get(sqlCheck, [id_alloggio, data_check_out, data_check_in], (errCheck, row) => {
+  db.get(sqlCheck, [id_alloggio, data_check_out, data_check_in], (errCheck, row): any => {
     if (errCheck) return res.status(500).json({ error: 'Errore controllo disponibilità: ' + errCheck.message });
     if (row) return res.status(409).json({ error: 'Overbooking! Date già occupate in questa struttura.' });
 
     db.run('BEGIN TRANSACTION;');
     const sqlSoggiorno = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente) VALUES (?, ?, ?, 'PrenotazioneSito')`;
 
-    db.run(sqlSoggiorno, [id_alloggio, data_check_in, data_check_out], function (this: RunResult, err) {
+    db.run(sqlSoggiorno, [id_alloggio, data_check_in, data_check_out], function (this: RunResult, err): any {
       if (err) { db.run('ROLLBACK;'); return res.status(500).json({ error: err.message }); }
 
       const nuovoIdSoggiorno = this.lastID;
@@ -68,16 +68,16 @@ export const modificaSoggiorno = (req: Request, res: Response): any => {
 
   if (permanenza <= 0 || permanenza < 2) return res.status(400).json({ error: 'Date non valide o inferiori a 2 notti.' });
 
-  db.get(`SELECT id_alloggio FROM SOGGIORNI WHERE id_soggiorno = ?`, [id_soggiorno], (err, row: any) => {
+  db.get(`SELECT id_alloggio FROM SOGGIORNI WHERE id_soggiorno = ?`, [id_soggiorno], (err, row: any): any => {
     if (err || !row) return res.status(404).json({ error: 'Soggiorno non trovato.' });
 
     const sqlCheckDisponibilita = `SELECT id_soggiorno FROM SOGGIORNI WHERE id_alloggio = ? AND id_soggiorno != ? AND data_check_in < ? AND data_check_out > ?`;
 
-    db.get(sqlCheckDisponibilita, [row.id_alloggio, id_soggiorno, data_check_out, data_check_in], (errCheck, overlap) => {
+    db.get(sqlCheckDisponibilita, [row.id_alloggio, id_soggiorno, data_check_out, data_check_in], (errCheck, overlap): any => {
       if (overlap) return res.status(409).json({ error: 'Impossibile modificare: date occupate.' });
 
       db.run('BEGIN TRANSACTION;');
-      db.run(`UPDATE SOGGIORNI SET data_check_in = ?, data_check_out = ? WHERE id_soggiorno = ?`, [data_check_in, data_check_out, id_soggiorno], (errUp) => {
+      db.run(`UPDATE SOGGIORNI SET data_check_in = ?, data_check_out = ? WHERE id_soggiorno = ?`, [data_check_in, data_check_out, id_soggiorno], (errUp): any => {
         if (errUp) { db.run('ROLLBACK;'); return res.status(500).json({ error: errUp.message }); }
 
         db.run(`UPDATE CLIENTE SET permanenza = ? WHERE id_soggiorno = ?`, [permanenza, id_soggiorno], (errCli) => {
@@ -92,10 +92,10 @@ export const modificaSoggiorno = (req: Request, res: Response): any => {
 
 export const rimuoviSoggiorno = (req: Request, res: Response): any => {
   const db = getDb();
-  const id_soggiorno = req.params.id;
+  const id_soggiorno = req.params['id'];
 
   db.run('BEGIN TRANSACTION;');
-  db.run('DELETE FROM CLIENTE WHERE id_soggiorno = ?', [id_soggiorno], (err) => {
+  db.run('DELETE FROM CLIENTE WHERE id_soggiorno = ?', [id_soggiorno], (err): any => {
     if (err) { db.run('ROLLBACK;'); return res.status(500).json({ error: err.message }); }
     
     db.run('DELETE FROM SOGGIORNI WHERE id_soggiorno = ?', [id_soggiorno], (errSogg) => {
@@ -111,7 +111,7 @@ export const bloccaDate = (req: Request, res: Response): any => {
   const { id_alloggio, data_check_in, data_check_out } = req.body;
 
   const sqlCheckOccupato = `SELECT id_soggiorno FROM SOGGIORNI WHERE id_alloggio = ? AND data_check_in < ? AND data_check_out > ?`;
-  db.get(sqlCheckOccupato, [id_alloggio, data_check_out, data_check_in], (err, row) => {
+  db.get(sqlCheckOccupato, [id_alloggio, data_check_out, data_check_in], (err, row): any => {
     if (row) return res.status(409).json({ error: "Alloggio già occupato in questo periodo." });
 
     const sqlInsertBlocco = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente) VALUES (?, ?, ?, 'BloccatoSito')`;
@@ -158,7 +158,7 @@ export const getSoggiorniAttivi = (req: Request, res: Response) => {
     WHERE ? BETWEEN S.data_check_in AND S.data_check_out
     ORDER BY S.data_check_out ASC
   `;
-  db.all(sql, [oggi], (err, rows) => {
+  db.all(sql, [oggi], (err, rows): any => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -166,7 +166,7 @@ export const getSoggiorniAttivi = (req: Request, res: Response) => {
 
 export const getStatoPulizie = (req: Request, res: Response) => {
   const db = getDb();
-  db.all(`SELECT id_alloggio, nome_alloggio, stato_pulizia FROM ALLOGGIO`, [], (err, rows) => {
+  db.all(`SELECT id_alloggio, nome_alloggio, stato_pulizia FROM ALLOGGIO`, [], (err, rows): any => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(rows);
   });
@@ -181,7 +181,7 @@ export const aggiornaPulizie = (req: Request, res: Response) => {
   const { id } = req.params;
   const { stato_pulizia } = req.body;
 
-  db.run(`UPDATE ALLOGGIO SET stato_pulizia = ? WHERE id_alloggio = ?`, [stato_pulizia, id], (err) => {
+  db.run(`UPDATE ALLOGGIO SET stato_pulizia = ? WHERE id_alloggio = ?`, [stato_pulizia, id], (err): any => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Stato pulizia aggiornato!' });
   });
@@ -189,7 +189,7 @@ export const aggiornaPulizie = (req: Request, res: Response) => {
 
 export const azionaCheckIn = (req: Request, res: Response) => {
   const db = getDb();
-  db.run(`UPDATE SOGGIORNI SET stato_osservatorio_in = 1 WHERE id_soggiorno = ?`, [req.params['id']], (err) => {
+  db.run(`UPDATE SOGGIORNI SET stato_osservatorio_in = 1 WHERE id_soggiorno = ?`, [req.params['id']], (err): any => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Check-in registrato internamente.' });
   });
@@ -197,7 +197,7 @@ export const azionaCheckIn = (req: Request, res: Response) => {
 
 export const azionaCheckOut = (req: Request, res: Response) => {
   const db = getDb();
-  db.run(`UPDATE SOGGIORNI SET stato_osservatorio_out = 1 WHERE id_soggiorno = ?`, [req.params.id], (err) => {
+  db.run(`UPDATE SOGGIORNI SET stato_osservatorio_out = 1 WHERE id_soggiorno = ?`, [req.params['id']], (err): any => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ message: 'Check-out registrato internamente.' });
   });

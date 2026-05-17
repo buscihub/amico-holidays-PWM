@@ -80,7 +80,6 @@ export const initDb = () => {
               data_check_in TEXT NOT NULL,
               data_check_out TEXT NOT NULL,
               stato_osservatorio_in INTEGER DEFAULT 0,
-              stato_osservatorio_out INTEGER DEFAULT 0,
               sorgente TEXT DEFAULT 'airbnb',
               FOREIGN KEY(id_alloggio) REFERENCES ALLOGGIO(id_alloggio)
           )`);

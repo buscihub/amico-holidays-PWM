@@ -7,7 +7,6 @@ import {
   getDashboardStats,
   getSoggiorniAttivi,
   getStatoPulizie,
-  aggiornaPulizie,
   azionaCheckIn,
   azionaCheckOut,
   storicoPrenotazioni
@@ -36,7 +35,6 @@ router.get('/soggiorni/attivi', getSoggiorniAttivi);
 router.get('/alloggi/stato-pulizie', getStatoPulizie);
 
 // --- Azioni Gestionali Host ---
-router.put('/alloggi/:id/pulizie', aggiornaPulizie);
 router.put('/:id/checkin', azionaCheckIn);
 router.put('/:id/checkout', azionaCheckOut);
 router.get('/storico/ricerca', storicoPrenotazioni);

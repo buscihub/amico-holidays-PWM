@@ -176,17 +176,6 @@ export const getStatoPulizie = (req: Request, res: Response) => {
 // 3. CONTROLLER GESTIONALI HOST (Aggiornamento Stati e Storico Ricerca)
 // =========================================================================
 
-export const aggiornaPulizie = (req: Request, res: Response) => {
-  const db = getDb();
-  const { id } = req.params;
-  const { stato_pulizia } = req.body;
-
-  db.run(`UPDATE ALLOGGIO SET stato_pulizia = ? WHERE id_alloggio = ?`, [stato_pulizia, id], (err): any => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ message: 'Stato pulizia aggiornato!' });
-  });
-};
-
 export const azionaCheckIn = (req: Request, res: Response) => {
   const db = getDb();
   db.run(`UPDATE SOGGIORNI SET stato_osservatorio_in = 1 WHERE id_soggiorno = ?`, [req.params['id']], (err): any => {

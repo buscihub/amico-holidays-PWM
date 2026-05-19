@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { getDb } from '../db-config'; 
+import { getDb } from '../db-config';
 import { RunResult } from 'sqlite3';
 
 // =========================================================================
@@ -7,7 +7,7 @@ import { RunResult } from 'sqlite3';
 // =========================================================================
 
 /**
- * Rappresenta la struttura dei dati richiesti nel corpo (body) 
+ * Rappresenta la struttura dei dati richiesti nel corpo (body)
  * per la creazione o l'inserimento di un nuovo soggiorno dal sito.
  */
 interface INuovoSoggiornoBody {
@@ -20,7 +20,7 @@ interface INuovoSoggiornoBody {
 }
 
 /**
- * Rappresenta la struttura dei dati richiesti nel body 
+ * Rappresenta la struttura dei dati richiesti nel body
  * per la modifica delle date di un soggiorno esistente.
  */
 interface IModificaSoggiornoBody {
@@ -29,7 +29,7 @@ interface IModificaSoggiornoBody {
 }
 
 /**
- * Rappresenta la struttura dati richiesta nel body 
+ * Rappresenta la struttura dati richiesta nel body
  * per l'inserimento di un blocco manuale sulle date.
  */
 interface IBloccoDateBody {
@@ -39,7 +39,7 @@ interface IBloccoDateBody {
 }
 
 /**
- * Specifica i campi mappati per ogni riga restituita dalla query 
+ * Specifica i campi mappati per ogni riga restituita dalla query
  * di JOIN per i Soggiorni Attivi nella Dashboard.
  */
 interface ISoggiornoAttivo {
@@ -63,23 +63,23 @@ interface IStatoPuliziaAlloggio {
   stato_pulizia: number;
 }
 
-
 // =========================================================================
 // 1. OPERAZIONI CRUD UTENTE / HOST (Gestione Prenotazioni e Blocchi)
 // =========================================================================
 
 /**
  * @API POST /api/aggiungi-soggiorno
- * @Descrizione Registra una nuova prenotazione inserita manualmente dal sito, 
- * effettuando controlli di overbooking e inserendo i dati in transazione 
+ * @Descrizione Registra una nuova prenotazione inserita manualmente dal sito,
+ * effettuando controlli di overbooking e inserendo i dati in transazione
  * sia nella tabella SOGGIORNI che nella tabella CLIENTE.
  */
 export const aggiungiSoggiorno = (
-  req: Request<{}, {}, INuovoSoggiornoBody>, 
-  res: Response
+  req: Request<{}, {}, INuovoSoggiornoBody>,
+  res: Response,
 ): void => {
   const db = getDb();
-  const { id_alloggio, data_check_in, data_check_out, sesso, cittadinanza, luogo_residenza } = req.body;
+  const { id_alloggio, data_check_in, data_check_out, sesso, cittadinanza, luogo_residenza } =
+    req.body;
 
   // VERIFICA PRELIMINARE: Controllo presenza campi obbligatori
   if (!id_alloggio || !data_check_in || !data_check_out) {
@@ -98,7 +98,7 @@ export const aggiungiSoggiorno = (
 
   // VALIDAZIONE REGOLA DI BUSINESS: Impedire check-in retroattivi
   const oggi = new Date();
-  oggi.setHours(0, 0, 0, 0); 
+  oggi.setHours(0, 0, 0, 0);
   if (inizio < oggi) {
     res.status(400).json({ error: 'Non puoi effettuare un check-in nel passato!' });
     return;
@@ -133,41 +133,54 @@ export const aggiungiSoggiorno = (
 
     const sqlSoggiorno = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente) VALUES (?, ?, ?, 'PrenotazioneSito')`;
 
-    db.run(sqlSoggiorno, [id_alloggio, data_check_in, data_check_out], function (this: RunResult, err) {
-      if (err) { 
-        db.run('ROLLBACK;'); 
-        res.status(500).json({ error: 'Errore inserimento soggiorno: ' + err.message }); 
-        return; 
-      }
-
-      // Recupero l'ID autoincrementale appena generato da SQLite per collegare il cliente
-      const nuovoIdSoggiorno = this.lastID;
-      const sqlCliente = `INSERT INTO CLIENTE (id_soggiorno, sesso, cittadinanza, luogo_residenza, permanenza) VALUES (?, ?, ?, ?, ?)`;
-
-      db.run(sqlCliente, [nuovoIdSoggiorno, sesso, cittadinanza, luogo_residenza, permanenza], (errCliente) => {
-        if (errCliente) { 
-          db.run('ROLLBACK;'); 
-          res.status(500).json({ error: 'Errore inserimento anagrafica cliente: ' + errCliente.message }); 
-          return; 
+    db.run(
+      sqlSoggiorno,
+      [id_alloggio, data_check_in, data_check_out],
+      function (this: RunResult, err) {
+        if (err) {
+          db.run('ROLLBACK;');
+          res.status(500).json({ error: 'Errore inserimento soggiorno: ' + err.message });
+          return;
         }
-        
-        // Se entrambe le INSERT vanno a buon fine, salviamo permanentemente nel file DB
-        db.run('COMMIT;');
-        res.status(200).json({ message: 'Registrazione completata con successo!', id_soggiorno: nuovoIdSoggiorno });
-      });
-    });
+
+        // Recupero l'ID autoincrementale appena generato da SQLite per collegare il cliente
+        const nuovoIdSoggiorno = this.lastID;
+        const sqlCliente = `INSERT INTO CLIENTE (id_soggiorno, sesso, cittadinanza, luogo_residenza, permanenza) VALUES (?, ?, ?, ?, ?)`;
+
+        db.run(
+          sqlCliente,
+          [nuovoIdSoggiorno, sesso, cittadinanza, luogo_residenza, permanenza],
+          (errCliente) => {
+            if (errCliente) {
+              db.run('ROLLBACK;');
+              res
+                .status(500)
+                .json({ error: 'Errore inserimento anagrafica cliente: ' + errCliente.message });
+              return;
+            }
+
+            // Se entrambe le INSERT vanno a buon fine, salviamo permanentemente nel file DB
+            db.run('COMMIT;');
+            res.status(200).json({
+              message: 'Registrazione completata con successo!',
+              id_soggiorno: nuovoIdSoggiorno,
+            });
+          },
+        );
+      },
+    );
   });
 };
 
 /**
  * @API PUT /api/:id
- * @Descrizione Modifica le date di check-in e check-out di un soggiorno esistente, 
- * ricalcolando i giorni di permanenza ed escludendo l'id corrente 
+ * @Descrizione Modifica le date di check-in e check-out di un soggiorno esistente,
+ * ricalcolando i giorni di permanenza ed escludendo l'id corrente
  * dal controllo di overbooking.
  */
 export const modificaSoggiorno = (
-  req: Request<{ id: string }, {}, IModificaSoggiornoBody>, 
-  res: Response
+  req: Request<{ id: string }, {}, IModificaSoggiornoBody>,
+  res: Response,
 ): void => {
   const db = getDb();
   const id_soggiorno = req.params.id;
@@ -188,40 +201,69 @@ export const modificaSoggiorno = (
   }
 
   // Recupero l'alloggio associato per poter fare il controllo di sovrapposizione date
-  db.get(`SELECT id_alloggio FROM SOGGIORNI WHERE id_soggiorno = ?`, [id_soggiorno], (err, row: { id_alloggio: number } | undefined) => {
-    if (err || !row) {
-      res.status(404).json({ error: 'Soggiorno non trovato nel database.' });
-      return;
-    }
-
-    // Escludiamo "id_soggiorno != ?" dalla query per evitare che il record vada in conflitto con se stesso
-    const sqlCheckDisponibilita = `SELECT id_soggiorno FROM SOGGIORNI WHERE id_alloggio = ? AND id_soggiorno != ? AND data_check_in < ? AND data_check_out > ?`;
-
-    db.get(sqlCheckDisponibilita, [row.id_alloggio, id_soggiorno, data_check_out, data_check_in], (errCheck, overlap) => {
-      if (overlap) {
-        res.status(409).json({ error: 'Impossibile modificare: le nuove date sono già occupate.' });
+  db.get(
+    `SELECT id_alloggio FROM SOGGIORNI WHERE id_soggiorno = ?`,
+    [id_soggiorno],
+    (err, row: { id_alloggio: number } | undefined) => {
+      if (err || !row) {
+        res.status(404).json({ error: 'Soggiorno non trovato nel database.' });
         return;
       }
 
-      // Transazione per aggiornare coerentemente date del soggiorno e giorni di permanenza dell'anagrafica
-      db.run('BEGIN TRANSACTION;');
-      db.run(`UPDATE SOGGIORNI SET data_check_in = ?, data_check_out = ? WHERE id_soggiorno = ?`, [data_check_in, data_check_out, id_soggiorno], (errUp) => {
-        if (errUp) { db.run('ROLLBACK;'); res.status(500).json({ error: errUp.message }); return; }
+      // Escludiamo "id_soggiorno != ?" dalla query per evitare che il record vada in conflitto con se stesso
+      const sqlCheckDisponibilita = `SELECT id_soggiorno FROM SOGGIORNI WHERE id_alloggio = ? AND id_soggiorno != ? AND data_check_in < ? AND data_check_out > ?`;
 
-        db.run(`UPDATE CLIENTE SET permanenza = ? WHERE id_soggiorno = ?`, [permanenza, id_soggiorno], (errCli) => {
-          if (errCli) { db.run('ROLLBACK;'); res.status(500).json({ error: errCli.message }); return; }
-          
-          db.run('COMMIT;');
-          res.status(200).json({ message: 'Prenotazione modificata correttamente!', nuova_permanenza: permanenza });
-        });
-      });
-    });
-  });
+      db.get(
+        sqlCheckDisponibilita,
+        [row.id_alloggio, id_soggiorno, data_check_out, data_check_in],
+        (errCheck, overlap) => {
+          if (overlap) {
+            res
+              .status(409)
+              .json({ error: 'Impossibile modificare: le nuove date sono già occupate.' });
+            return;
+          }
+
+          // Transazione per aggiornare coerentemente date del soggiorno e giorni di permanenza dell'anagrafica
+          db.run('BEGIN TRANSACTION;');
+          db.run(
+            `UPDATE SOGGIORNI SET data_check_in = ?, data_check_out = ? WHERE id_soggiorno = ?`,
+            [data_check_in, data_check_out, id_soggiorno],
+            (errUp) => {
+              if (errUp) {
+                db.run('ROLLBACK;');
+                res.status(500).json({ error: errUp.message });
+                return;
+              }
+
+              db.run(
+                `UPDATE CLIENTE SET permanenza = ? WHERE id_soggiorno = ?`,
+                [permanenza, id_soggiorno],
+                (errCli) => {
+                  if (errCli) {
+                    db.run('ROLLBACK;');
+                    res.status(500).json({ error: errCli.message });
+                    return;
+                  }
+
+                  db.run('COMMIT;');
+                  res.status(200).json({
+                    message: 'Prenotazione modificata correttamente!',
+                    nuova_permanenza: permanenza,
+                  });
+                },
+              );
+            },
+          );
+        },
+      );
+    },
+  );
 };
 
 /**
  * @API DELETE /api/:id
- * @Descrizione Elimina una prenotazione rimuovendo in cascata prima i dati del cliente 
+ * @Descrizione Elimina una prenotazione rimuovendo in cascata prima i dati del cliente
  * e successivamente la riga del soggiorno, rispettando i vincoli di integrità.
  */
 export const rimuoviSoggiorno = (req: Request<{ id: string }>, res: Response): void => {
@@ -229,15 +271,23 @@ export const rimuoviSoggiorno = (req: Request<{ id: string }>, res: Response): v
   const id_soggiorno = req.params.id;
 
   db.run('BEGIN TRANSACTION;');
-  
+
   // Rimozione record figlio (CLIENTE)
   db.run('DELETE FROM CLIENTE WHERE id_soggiorno = ?', [id_soggiorno], (err) => {
-    if (err) { db.run('ROLLBACK;'); res.status(500).json({ error: err.message }); return; }
-    
+    if (err) {
+      db.run('ROLLBACK;');
+      res.status(500).json({ error: err.message });
+      return;
+    }
+
     // Rimozione record padre (SOGGIORNI)
     db.run('DELETE FROM SOGGIORNI WHERE id_soggiorno = ?', [id_soggiorno], (errSogg) => {
-      if (errSogg) { db.run('ROLLBACK;'); res.status(500).json({ error: errSogg.message }); return; }
-      
+      if (errSogg) {
+        db.run('ROLLBACK;');
+        res.status(500).json({ error: errSogg.message });
+        return;
+      }
+
       db.run('COMMIT;');
       res.status(200).json({ message: 'Prenotazione rimossa con successo dal sistema.' });
     });
@@ -246,35 +296,39 @@ export const rimuoviSoggiorno = (req: Request<{ id: string }>, res: Response): v
 
 /**
  * @API POST /api/blocca-date
- * @Descrizione Permette all'Host di bloccare manualmente un range di date 
+ * @Descrizione Permette all'Host di bloccare manualmente un range di date
  * (es. per manutenzione straordinaria) impostando la sorgente su 'BloccatoSito'.
  */
-export const bloccaDate = (
-  req: Request<{}, {}, IBloccoDateBody>, 
-  res: Response
-): void => {
+export const bloccaDate = (req: Request<{}, {}, IBloccoDateBody>, res: Response): void => {
   const db = getDb();
   const { id_alloggio, data_check_in, data_check_out } = req.body;
 
   const sqlCheckOccupato = `SELECT id_soggiorno FROM SOGGIORNI WHERE id_alloggio = ? AND data_check_in < ? AND data_check_out > ?`;
-  
+
   db.get(sqlCheckOccupato, [id_alloggio, data_check_out, data_check_in], (err, row) => {
     if (row) {
-      res.status(409).json({ error: "L'alloggio risulta già occupato o bloccato in questo periodo." });
+      res
+        .status(409)
+        .json({ error: "L'alloggio risulta già occupato o bloccato in questo periodo." });
       return;
     }
 
     const sqlInsertBlocco = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente) VALUES (?, ?, ?, 'BloccatoSito')`;
-    db.run(sqlInsertBlocco, [id_alloggio, data_check_in, data_check_out], function(this: RunResult, errInsert) {
-      if (errInsert) {
-        res.status(500).json({ error: errInsert.message });
-        return;
-      }
-      res.status(201).json({ message: 'Alloggio bloccato correttamente.', id_blocco: this.lastID });
-    });
+    db.run(
+      sqlInsertBlocco,
+      [id_alloggio, data_check_in, data_check_out],
+      function (this: RunResult, errInsert) {
+        if (errInsert) {
+          res.status(500).json({ error: errInsert.message });
+          return;
+        }
+        res
+          .status(201)
+          .json({ message: 'Alloggio bloccato correttamente.', id_blocco: this.lastID });
+      },
+    );
   });
 };
-
 
 // =========================================================================
 // 2. CONTROLLER DATA ACQUISITION & MONITORING (Aggregazione Dati Dashboard)
@@ -282,7 +336,7 @@ export const bloccaDate = (
 
 /**
  * @API GET /api/dashboard/stats
- * @Descrizione Elabora i conteggi statistici in tempo reale per i 4 Box in alto 
+ * @Descrizione Elabora i conteggi statistici in tempo reale per i 4 Box in alto
  * della Dashboard analizzando la data odierna (YYYY-MM-DD).
  */
 export const getDashboardStats = (req: Request, res: Response): void => {
@@ -297,13 +351,12 @@ export const getDashboardStats = (req: Request, res: Response): void => {
   db.get(qOccupate, [oggi], (err, rowOccupate: { conto: number } | undefined) => {
     db.get(qArrivi, [oggi], (err2, rowArrivi: { conto: number } | undefined) => {
       db.get(qPartenze, [oggi], (err3, rowPartenze: { conto: number } | undefined) => {
-        
         // Risposta unificata aggregando i singoli risultati dei conteggi
         res.json({
           camereOccupate: rowOccupate?.conto || 0,
           inArrivo: rowArrivi?.conto || 0,
           inPartenza: rowPartenze?.conto || 0,
-          checkOutDaFare: rowPartenze?.conto || 0
+          checkOutDaFare: rowPartenze?.conto || 0,
         });
       });
     });
@@ -312,7 +365,7 @@ export const getDashboardStats = (req: Request, res: Response): void => {
 
 /**
  * @API GET /api/soggiorni/attivi
- * @Descrizione Estrae l'elenco di tutti i soggiorni in corso nella data odierna, 
+ * @Descrizione Estrae l'elenco di tutti i soggiorni in corso nella data odierna,
  * effettuando una JOIN con la tabella ALLOGGIO per visualizzare il nome testuale della stanza.
  */
 export const getSoggiorniAttivi = (req: Request, res: Response): void => {
@@ -326,7 +379,7 @@ export const getSoggiorniAttivi = (req: Request, res: Response): void => {
     WHERE ? BETWEEN S.data_check_in AND S.data_check_out
     ORDER BY S.data_check_out ASC
   `;
-  
+
   db.all(sql, [oggi], (err, rows: ISoggiornoAttivo[]) => {
     if (err) {
       res.status(500).json({ error: err.message });
@@ -338,21 +391,24 @@ export const getSoggiorniAttivi = (req: Request, res: Response): void => {
 
 /**
  * @API GET /api/alloggi/stato-pulizie
- * @Descrizione Recupera lo stato corrente delle pulizie di ciascun alloggio presente 
+ * @Descrizione Recupera lo stato corrente delle pulizie di ciascun alloggio presente
  * nel sistema per popolare il widget di destra della Dashboard.
  */
 export const getStatoPulizie = (req: Request, res: Response): void => {
   const db = getDb();
-  
-  db.all(`SELECT id_alloggio, nome_alloggio, stato_pulizia FROM ALLOGGIO`, [], (err, rows: IStatoPuliziaAlloggio[]) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
-};
 
+  db.all(
+    `SELECT id_alloggio, nome_alloggio, stato_pulizia FROM ALLOGGIO`,
+    [],
+    (err, rows: IStatoPuliziaAlloggio[]) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json(rows);
+    },
+  );
+};
 
 // =========================================================================
 // 3. CONTROLLER GESTIONALI HOST ( Flussi Operativi e Ricerca)
@@ -360,38 +416,49 @@ export const getStatoPulizie = (req: Request, res: Response): void => {
 
 /**
  * @API PUT /api/alloggi/:id/pulizie
- * @Descrizione Permette all'Host o al Co-Host di cambiare lo stato di pulizia 
+ * @Descrizione Permette all'Host o al Co-Host di cambiare lo stato di pulizia
  * di una stanza (0 = Da Pulire, 1 = Pulita).
  */
-export const aggiornaPulizie = (req: Request<{ id: string }, {}, { stato_pulizia: number }>, res: Response): void => {
+export const aggiornaPulizie = (
+  req: Request<{ id: string }, {}, { stato_pulizia: number }>,
+  res: Response,
+): void => {
   const db = getDb();
   const { id } = req.params;
   const { stato_pulizia } = req.body;
 
-  db.run(`UPDATE ALLOGGIO SET stato_pulizia = ? WHERE id_alloggio = ?`, [stato_pulizia, id], (err) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json({ message: 'Stato pulizia alloggio aggiornato con successo!' });
-  });
+  db.run(
+    `UPDATE ALLOGGIO SET stato_pulizia = ? WHERE id_alloggio = ?`,
+    [stato_pulizia, id],
+    (err) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json({ message: 'Stato pulizia alloggio aggiornato con successo!' });
+    },
+  );
 };
 
 /**
  * @API PUT /api/:id/checkin
- * @Descrizione Esegue il "Check-in Digitale" dell'ospite in struttura, marcando 
+ * @Descrizione Esegue il "Check-in Digitale" dell'ospite in struttura, marcando
  * il flag stato_osservatorio_in a 1 (Pronto per l'esportazione burocratica).
  */
 export const azionaCheckIn = (req: Request<{ id: string }>, res: Response): void => {
   const db = getDb();
-  
-  db.run(`UPDATE SOGGIORNI SET stato_osservatorio_in = 1 WHERE id_soggiorno = ?`, [req.params.id], (err) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json({ message: 'Check-in registrato internamente nel PMS.' });
-  });
+
+  db.run(
+    `UPDATE SOGGIORNI SET stato_osservatorio_in = 1 WHERE id_soggiorno = ?`,
+    [req.params.id],
+    (err) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json({ message: 'Check-in registrato internamente nel PMS.' });
+    },
+  );
 };
 
 /**
@@ -401,24 +468,28 @@ export const azionaCheckIn = (req: Request<{ id: string }>, res: Response): void
  */
 export const azionaCheckOut = (req: Request<{ id: string }>, res: Response): void => {
   const db = getDb();
-  
-  db.run(`UPDATE SOGGIORNI SET stato_osservatorio_out = 1 WHERE id_soggiorno = ?`, [req.params.id], (err) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json({ message: 'Check-out completato e archiviato.' });
-  });
+
+  db.run(
+    `UPDATE SOGGIORNI SET stato_osservatorio_out = 1 WHERE id_soggiorno = ?`,
+    [req.params.id],
+    (err) => {
+      if (err) {
+        res.status(500).json({ error: err.message });
+        return;
+      }
+      res.json({ message: 'Check-out completato e archiviato.' });
+    },
+  );
 };
 
 /**
  * @API GET /api/storico/ricerca
- * @Descrizione Gestisce la pagina dello Storico delle Prenotazioni, permettendo 
+ * @Descrizione Gestisce la pagina dello Storico delle Prenotazioni, permettendo
  * all'Host di filtrare i risultati per un alloggio specifico tramite Query Parameter opzionale (?id_alloggio=X).
  */
 export const storicoPrenotazioni = (
-  req: Request<{}, {}, {}, { id_alloggio?: string }>, 
-  res: Response
+  req: Request<{}, {}, {}, { id_alloggio?: string }>,
+  res: Response,
 ): void => {
   const db = getDb();
   const { id_alloggio } = req.query; // Estrazione del filtro opzionale dall'URL
@@ -432,7 +503,7 @@ export const storicoPrenotazioni = (
     sql += ` WHERE S.id_alloggio = ?`;
     params.push(id_alloggio);
   }
-  
+
   // Ordiniamo le prenotazioni partendo dalle più recenti in assoluto
   sql += ` ORDER BY S.data_check_in DESC`;
 

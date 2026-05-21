@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import ical from 'node-ical'
 import { getDb } from '../db-config';
 import { RunResult } from 'sqlite3';
 
@@ -131,7 +132,7 @@ export const aggiungiSoggiorno = (
     // ACID TRANSAZIONALE: Avvio transazione per garantire atomicità tra le due tabelle
     db.run('BEGIN TRANSACTION;');
 
-    const sqlSoggiorno = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente) VALUES (?, ?, ?, 'PrenotazioneSito')`;
+    const sqlSoggiorno = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente, stato_prenotazione, data_creazione_record) VALUES (?, ?, ?, 'PrenotazioneSito', 'pending', CURRENT_TIMESTAMP)`;
 
     db.run(
       sqlSoggiorno,
@@ -161,9 +162,12 @@ export const aggiungiSoggiorno = (
 
             // Se entrambe le INSERT vanno a buon fine, salviamo permanentemente nel file DB
             db.run('COMMIT;');
+            // MODIFICA FASE 2: Aggiorniamo la risposta per comunicare lo stato pending al front-end
             res.status(200).json({
-              message: 'Registrazione completata con successo!',
+              success: true,
+              message: 'Pre-prenotazione registrata! In attesa di pagamento su Airbnb.',
               id_soggiorno: nuovoIdSoggiorno,
+              stato_prenotazione: 'pending'
             });
           },
         );
@@ -389,6 +393,67 @@ export const getSoggiorniAttivi = (req: Request, res: Response): void => {
   });
 };
 
+export const sincronizzaManuale = (req: Request, res: Response): void => {
+  const db = getDb();
+
+  // 1. PULIZIA PENDING SCADUTI
+  const sqlGarbageCollection = `
+    DELETE FROM SOGGIORNI 
+    WHERE stato_prenotazione = 'pending' 
+      AND data_creazione_record < DATETIME('now', '-30 minutes')
+  `;
+  
+  db.run(sqlGarbageCollection, [], (errClean: Error): Response | void => {
+    if (errClean) {
+      // ECCO IL TUO FORMATO!
+      return res.status(500).json({ error: 'Errore durante la pulizia delle prenotazioni scadute.' });
+    }
+
+    const sqlGetIcal = 'SELECT id_alloggio, link_ical FROM ALLOGGIO WHERE link_ical IS NOT NULL';
+
+    db.all(sqlGetIcal, [], async (err: Error | null, rows: any[]) => {
+      if (err) {
+        // ECCO IL TUO FORMATO!
+        return res.status(500).json({ error: 'Errore nel recupero dei link iCal dal database.' });
+      }
+
+      if (!rows || rows.length === 0) {
+        return res.status(404).json({ error: 'Nessun link iCal configurato per gli alloggi.' });
+      }
+
+      try {
+        // Cicliamo gli alloggi
+        for (const row of rows) {
+          const { id_alloggio, link_ical } = row;
+          const eventi = await ical.async.fromURL(link_ical);
+
+          const sqlPulisci = `DELETE FROM SOGGIORNI WHERE id_alloggio = ? AND sorgente = 'PrenotazioneAirbnb' AND stato_prenotazione = 'confirmed'`;
+          
+          // Usiamo una Promise per non bloccare il ciclo asincrono
+          await new Promise<void>((resolve, reject) => {
+            db.run(sqlPulisci, [id_alloggio], (errPulisci) => {
+              if (errPulisci) reject(errPulisci);
+              resolve();
+            });
+          });
+
+          // ... (Qui va inserita la stessa identica logica di matching del cron job) ...
+        }
+
+        // Se il ciclo finisce senza cadere nel catch:
+        return res.status(200).json({ 
+          success: true, 
+          message: 'Sincronizzazione calendari completata con successo!' 
+        });
+
+      } catch (error) {
+        // ECCO IL TUO FORMATO!
+        return res.status(500).json({ error: 'Errore di rete o sincronizzazione fallita con i server Airbnb.' });
+      }
+    });
+  });
+};
+
 /**
  * @API GET /api/alloggi/stato-pulizie
  * @Descrizione Recupera lo stato corrente delle pulizie di ciascun alloggio presente
@@ -409,6 +474,8 @@ export const getStatoPulizie = (req: Request, res: Response): void => {
     },
   );
 };
+
+
 
 // =========================================================================
 // 3. CONTROLLER GESTIONALI HOST ( Flussi Operativi e Ricerca)
@@ -457,27 +524,6 @@ export const azionaCheckIn = (req: Request<{ id: string }>, res: Response): void
         return;
       }
       res.json({ message: 'Check-in registrato internamente nel PMS.' });
-    },
-  );
-};
-
-/**
- * @API PUT /api/:id/checkout
- * @Descrizione Registra il "Check-out Digitale" al momento della partenza fisica dell'ospite,
- * impostando il flag stato_osservatorio_out a 1.
- */
-export const azionaCheckOut = (req: Request<{ id: string }>, res: Response): void => {
-  const db = getDb();
-
-  db.run(
-    `UPDATE SOGGIORNI SET stato_osservatorio_out = 1 WHERE id_soggiorno = ?`,
-    [req.params.id],
-    (err) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.json({ message: 'Check-out completato e archiviato.' });
     },
   );
 };

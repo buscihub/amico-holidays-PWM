@@ -8,9 +8,8 @@ import {
   getSoggiorniAttivi,
   getStatoPulizie,
   azionaCheckIn,
-  azionaCheckOut,
   storicoPrenotazioni
-} from '../controllers/prenotazioni.controllers';
+} from '../controllers/prenotazioni.controller';
 import { getDb } from '../db-config';
 
 const router = Router();
@@ -36,7 +35,6 @@ router.get('/alloggi/stato-pulizie', getStatoPulizie);
 
 // --- Azioni Gestionali Host ---
 router.put('/:id/checkin', azionaCheckIn);
-router.put('/:id/checkout', azionaCheckOut);
 router.get('/storico/ricerca', storicoPrenotazioni);
 
 export const prenotazioniRoutes = router;

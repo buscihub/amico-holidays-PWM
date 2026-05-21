@@ -20,12 +20,12 @@ export const getAlloggi = (req: Request, res: Response): any => {
             
             // Restituiamo la lista degli alloggi e i loro stati
             const alloggi = rows.map((row: any) => ({
-                id_alloggio: row.ID_Alloggio,
-                nome: row.Nome,
+                id_alloggio: row.id_alloggio,
+                nome: row.nome_alloggio,
                 stato_pulizia: Boolean(row.Stato_Pulizia),
                 kit_benvenuto: Boolean(row.Kit_Benvenuto),
-                airbnb_url_id: row.Airbnb_URL_ID || null,
-                ical_url: row.iCal_URL || null,
+                airbnb_url_id: row.link_airbnb || null,
+                ical_url: row.link_ical || null,
             }));
 
             return res.status(200).json({

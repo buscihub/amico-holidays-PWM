@@ -3,7 +3,7 @@ import cors from 'cors'; // <-- FONDAMENTALE per far parlare Angular col Backend
 import { initDb } from './db-config'; 
 import { prenotazioniRoutes } from './routes/prenotazioni.routes';
 import { alloggiRoutes } from './routes/alloggi.routes'; // <-- Rotte dei tuoi amici
-import { startSincJob } from './jobs/cron-job'; // <-- Il tuo cron job iCal
+import { startSincJob } from './crons/ical.cron'; // <-- Il tuo cron job iCal
 
 const app = express();
 

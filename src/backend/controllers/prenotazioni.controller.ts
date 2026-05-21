@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import ical from 'node-ical'
 import { getDb } from '../db-config';
 import { RunResult } from 'sqlite3';
+import { eseguiSincronizzazioneCore } from '../services/sincronizzazione.service';
 
 // =========================================================================
 // INTERFACCE DI TIPIZZAZIONE (CONTRATTI DATI)
@@ -393,65 +394,25 @@ export const getSoggiorniAttivi = (req: Request, res: Response): void => {
   });
 };
 
-export const sincronizzaManuale = (req: Request, res: Response): void => {
-  const db = getDb();
-
-  // 1. PULIZIA PENDING SCADUTI
-  const sqlGarbageCollection = `
-    DELETE FROM SOGGIORNI 
-    WHERE stato_prenotazione = 'pending' 
-      AND data_creazione_record < DATETIME('now', '-30 minutes')
-  `;
-  
-  db.run(sqlGarbageCollection, [], (errClean: Error): Response | void => {
-    if (errClean) {
-      // ECCO IL TUO FORMATO!
-      return res.status(500).json({ error: 'Errore durante la pulizia delle prenotazioni scadute.' });
-    }
-
-    const sqlGetIcal = 'SELECT id_alloggio, link_ical FROM ALLOGGIO WHERE link_ical IS NOT NULL';
-
-    db.all(sqlGetIcal, [], async (err: Error | null, rows: any[]) => {
-      if (err) {
-        // ECCO IL TUO FORMATO!
-        return res.status(500).json({ error: 'Errore nel recupero dei link iCal dal database.' });
-      }
-
-      if (!rows || rows.length === 0) {
-        return res.status(404).json({ error: 'Nessun link iCal configurato per gli alloggi.' });
-      }
-
-      try {
-        // Cicliamo gli alloggi
-        for (const row of rows) {
-          const { id_alloggio, link_ical } = row;
-          const eventi = await ical.async.fromURL(link_ical);
-
-          const sqlPulisci = `DELETE FROM SOGGIORNI WHERE id_alloggio = ? AND sorgente = 'PrenotazioneAirbnb' AND stato_prenotazione = 'confirmed'`;
-          
-          // Usiamo una Promise per non bloccare il ciclo asincrono
-          await new Promise<void>((resolve, reject) => {
-            db.run(sqlPulisci, [id_alloggio], (errPulisci) => {
-              if (errPulisci) reject(errPulisci);
-              resolve();
-            });
-          });
-
-          // ... (Qui va inserita la stessa identica logica di matching del cron job) ...
-        }
-
-        // Se il ciclo finisce senza cadere nel catch:
-        return res.status(200).json({ 
-          success: true, 
-          message: 'Sincronizzazione calendari completata con successo!' 
-        });
-
-      } catch (error) {
-        // ECCO IL TUO FORMATO!
-        return res.status(500).json({ error: 'Errore di rete o sincronizzazione fallita con i server Airbnb.' });
-      }
+// GET /api/sincronizza-ical
+export const sincronizzaManuale = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const db = getDb();
+    
+    // Invochiamo il core condiviso!
+    await eseguiSincronizzazioneCore(db);
+    
+    // Se non esplode nulla, andiamo a buon fine:
+    res.status(200).json({ 
+      success: true, 
+      message: 'Sincronizzazione calendari completata con successo!' 
     });
-  });
+  } catch (error: any) {
+    // Se il core lancia un errore, rispondiamo al frontend come piace a noi:
+    res.status(500).json({ 
+      error: error.message || 'Errore interno durante la sincronizzazione.' 
+    });
+  }
 };
 
 /**

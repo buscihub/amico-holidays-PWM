@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { 
   aggiungiSoggiorno, 
   modificaSoggiorno, 
@@ -7,18 +7,22 @@ import {
   getDashboardStats,
   getSoggiorniAttivi,
   azionaCheckIn,
-  storicoPrenotazioni
+  storicoPrenotazioni,
+  sincronizzaManuale // <-- 1. IMPORTATA LA NUOVA FUNZIONE
 } from '../controllers/prenotazioni.controller';
-import { getDb } from '../db-config';
+import { dbAll } from '../utils/db.util'; // <-- 2. IMPORTATO IL MAGAZZINIERE
 
 const router = Router();
 
 // --- Debug & Utility ---
-router.get('/lista', (req, res) => {
-  getDb().all('SELECT * FROM SOGGIORNI', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    return res.json(rows);
-  });
+// 3. AGGIORNATA CON ASYNC/AWAIT
+router.get('/lista', async (req: Request, res: Response) => {
+  try {
+    const rows = await dbAll('SELECT * FROM SOGGIORNI');
+    res.json(rows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // --- Operazioni Core Prenotazioni ---
@@ -30,6 +34,7 @@ router.delete('/:id', rimuoviSoggiorno);
 // --- Rotte Dati Dashboard ---
 router.get('/dashboard/stats', getDashboardStats);
 router.get('/soggiorni/attivi', getSoggiorniAttivi);
+router.get('/sincronizza-ical', sincronizzaManuale); // <-- 4. AGGIUNTA LA ROTTA PER IL SYNC MANUALE
 
 // --- Azioni Gestionali Host ---
 router.put('/:id/checkin', azionaCheckIn);

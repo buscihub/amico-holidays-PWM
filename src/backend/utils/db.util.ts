@@ -1,5 +1,6 @@
 import { resolve } from "path";
 import { getDb } from "../db-config";
+import { rejects } from "assert";
 
 const db = getDb()
 
@@ -45,13 +46,35 @@ export const dbRun = (
  * @returns Ritorna l'oggetto trovato, oppure 'undefined' se non c'è nessun risultato.
  */
 
-export const dbGet = (sql: string,params: any[] = []): Promise<T | undefined> => {
+export const dbGet = <T>(sql: string,params: any[] = []): Promise<T | undefined> => {
     return new Promise((resolve, reject) => {
         db.get(sql, params, function(err, row){
             if (err) {
                 reject(err)                
             } else {
                 resolve(row as T)
+            }
+        })
+    })
+}
+
+/**
+ * 🛠️ IL MAGAZZINIERE: dbAll
+ * 
+ * COSA FA: Si usa per leggere TANTE righe dal database e ottenere liste complete
+ * (es. recuperare lo storico, o la lista degli alloggi da pulire).
+ * 
+ * @param sql La query SQL (es. "SELECT * FROM CLIENTE")
+ * @param params Array dei parametri per i "?"
+ * @returns Ritorna un Array contenente tutti gli oggetti trovati. Se non trova nulla, ritorna un array vuoto [].
+ */
+export const dbAll = <T>(sql: string, params: any[] = []): Promise<T[]> => {
+    return new Promise((resolve, reject) => {
+        db.all(sql, params, function(err, rows){
+            if (err) {
+                reject(err)
+            } else {
+                resolve(rows as T[])
             }
         })
     })

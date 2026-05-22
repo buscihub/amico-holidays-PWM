@@ -1,69 +1,9 @@
 import { Request, Response } from 'express';
-import ical from 'node-ical'
+import ical from 'node-ical';
 import { getDb } from '../db-config';
 import { RunResult } from 'sqlite3';
 import { eseguiSincronizzazioneCore } from '../services/sincronizzazione.service';
-
-// =========================================================================
-// INTERFACCE DI TIPIZZAZIONE (CONTRATTI DATI)
-// =========================================================================
-
-/**
- * Rappresenta la struttura dei dati richiesti nel corpo (body)
- * per la creazione o l'inserimento di un nuovo soggiorno dal sito.
- */
-interface INuovoSoggiornoBody {
-  id_alloggio: number;
-  data_check_in: string;
-  data_check_out: string;
-  sesso: string;
-  cittadinanza: string;
-  luogo_residenza: string;
-}
-
-/**
- * Rappresenta la struttura dei dati richiesti nel body
- * per la modifica delle date di un soggiorno esistente.
- */
-interface IModificaSoggiornoBody {
-  data_check_in: string;
-  data_check_out: string;
-}
-
-/**
- * Rappresenta la struttura dati richiesta nel body
- * per l'inserimento di un blocco manuale sulle date.
- */
-interface IBloccoDateBody {
-  id_alloggio: number;
-  data_check_in: string;
-  data_check_out: string;
-}
-
-/**
- * Specifica i campi mappati per ogni riga restituita dalla query
- * di JOIN per i Soggiorni Attivi nella Dashboard.
- */
-interface ISoggiornoAttivo {
-  id_soggiorno: number;
-  id_alloggio: number;
-  data_check_in: string;
-  data_check_out: string;
-  stato_osservatorio_in: number;
-  stato_osservatorio_out: number;
-  sorgente: string;
-  nome_alloggio: string; // Ottenuto tramite JOIN con la tabella ALLOGGIO
-}
-
-/**
- * Specifica i campi mappati per ogni riga restituita dalla query
- * per lo Stato delle Pulizie degli alloggi.
- */
-interface IStatoPuliziaAlloggio {
-  id_alloggio: number;
-  nome_alloggio: string;
-  stato_pulizia: number;
-}
+import { creaSoggiorno } from '../services/prenotazioni.service';
 
 // =========================================================================
 // 1. OPERAZIONI CRUD UTENTE / HOST (Gestione Prenotazioni e Blocchi)
@@ -75,106 +15,56 @@ interface IStatoPuliziaAlloggio {
  * effettuando controlli di overbooking e inserendo i dati in transazione
  * sia nella tabella SOGGIORNI che nella tabella CLIENTE.
  */
-export const aggiungiSoggiorno = (
-  req: Request<{}, {}, INuovoSoggiornoBody>,
-  res: Response,
-): void => {
-  const db = getDb();
-  const { id_alloggio, data_check_in, data_check_out, sesso, cittadinanza, luogo_residenza } =
-    req.body;
+export const aggiungiSoggiorno = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { id_alloggio, data_check_in, data_check_out, sesso, cittadinanza, luogo_residenza } =
+      req.body;
 
-  // VERIFICA PRELIMINARE: Controllo presenza campi obbligatori
-  if (!id_alloggio || !data_check_in || !data_check_out) {
-    res.status(400).json({ error: 'Dati obbligatori mancanti. Impossibile procedere.' });
-    return;
-  }
-
-  const inizio = new Date(data_check_in);
-  const fine = new Date(data_check_out);
-
-  // VALIDAZIONE: Controllo consistenza formati data
-  if (isNaN(inizio.getTime()) || isNaN(fine.getTime())) {
-    res.status(400).json({ error: 'Formato data non valido.' });
-    return;
-  }
-
-  // VALIDAZIONE REGOLA DI BUSINESS: Impedire check-in retroattivi
-  const oggi = new Date();
-  oggi.setHours(0, 0, 0, 0);
-  if (inizio < oggi) {
-    res.status(400).json({ error: 'Non puoi effettuare un check-in nel passato!' });
-    return;
-  }
-
-  // VALIDAZIONE REGOLA DI BUSINESS: Calcolo e vincolo notti minime (Permanenza)
-  const permanenza = Math.ceil((fine.getTime() - inizio.getTime()) / (1000 * 60 * 60 * 24));
-  if (permanenza <= 0) {
-    res.status(400).json({ error: 'La data di check-out deve essere successiva al check-in.' });
-    return;
-  }
-  if (permanenza < 2) {
-    res.status(400).json({ error: 'Filtro di business: Bisogna prenotare almeno per 2 notti.' });
-    return;
-  }
-
-  // QUERY DI CONTROLLO ANTI-OVERBOOKING: Verifica intersezioni di date per lo stesso alloggio
-  const sqlCheck = `SELECT id_soggiorno FROM SOGGIORNI WHERE id_alloggio = ? AND data_check_in < ? AND data_check_out > ?`;
-
-  db.get(sqlCheck, [id_alloggio, data_check_out, data_check_in], (errCheck, row) => {
-    if (errCheck) {
-      res.status(500).json({ error: 'Errore controllo disponibilità: ' + errCheck.message });
-      return;
-    }
-    if (row) {
-      res.status(409).json({ error: 'Overbooking! Date già occupate in questa struttura.' });
+    // --- INIZIO VALIDAZIONE INPUT ---
+    if (!id_alloggio || !data_check_in || !data_check_out) {
+      res.status(400).json({ error: 'Dati obbligatori mancanti. Impossibile procedere.' });
       return;
     }
 
-    // ACID TRANSAZIONALE: Avvio transazione per garantire atomicità tra le due tabelle
-    db.run('BEGIN TRANSACTION;');
+    const inizio = new Date(data_check_in);
+    const fine = new Date(data_check_out);
 
-    const sqlSoggiorno = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente, stato_prenotazione, data_creazione_record) VALUES (?, ?, ?, 'PrenotazioneSito', 'pending', CURRENT_TIMESTAMP)`;
+    if (isNaN(inizio.getTime()) || isNaN(fine.getTime())) {
+      res.status(400).json({ error: 'Formato data non valido.' });
+      return;
+    }
 
-    db.run(
-      sqlSoggiorno,
-      [id_alloggio, data_check_in, data_check_out],
-      function (this: RunResult, err) {
-        if (err) {
-          db.run('ROLLBACK;');
-          res.status(500).json({ error: 'Errore inserimento soggiorno: ' + err.message });
-          return;
-        }
+    const oggi = new Date();
+    oggi.setHours(0, 0, 0, 0);
+    if (inizio < oggi) {
+      res.status(400).json({ error: 'Non puoi effettuare un check-in nel passato!' });
+      return;
+    }
 
-        // Recupero l'ID autoincrementale appena generato da SQLite per collegare il cliente
-        const nuovoIdSoggiorno = this.lastID;
-        const sqlCliente = `INSERT INTO CLIENTE (id_soggiorno, sesso, cittadinanza, luogo_residenza, permanenza) VALUES (?, ?, ?, ?, ?)`;
+    const permanenza = Math.ceil((fine.getTime() - inizio.getTime()) / (1000 * 60 * 60 * 24));
+    if (permanenza <= 0 || permanenza < 2) {
+      res.status(400).json({ error: 'La data non è valida o è inferiore al minimo di 2 notti.' });
+      return;
+    }
+    // --- FINE VALIDAZIONE INPUT ---
 
-        db.run(
-          sqlCliente,
-          [nuovoIdSoggiorno, sesso, cittadinanza, luogo_residenza, permanenza],
-          (errCliente) => {
-            if (errCliente) {
-              db.run('ROLLBACK;');
-              res
-                .status(500)
-                .json({ error: 'Errore inserimento anagrafica cliente: ' + errCliente.message });
-              return;
-            }
+    // LA MAGIA: Chiamiamo lo Chef e aspettiamo il risultato!
+    // Non c'è traccia di SQL qui dentro.
+    const nuovoIdSoggiorno = await creaSoggiorno(req.body, permanenza);
 
-            // Se entrambe le INSERT vanno a buon fine, salviamo permanentemente nel file DB
-            db.run('COMMIT;');
-            // MODIFICA FASE 2: Aggiorniamo la risposta per comunicare lo stato pending al front-end
-            res.status(200).json({
-              success: true,
-              message: 'Pre-prenotazione registrata! In attesa di pagamento su Airbnb.',
-              id_soggiorno: nuovoIdSoggiorno,
-              stato_prenotazione: 'pending'
-            });
-          },
-        );
-      },
-    );
-  });
+    // Serviamo il piatto al cliente
+    res.status(200).json({
+      success: true,
+      message: 'Pre-prenotazione registrata! In attesa di pagamento su Airbnb.',
+      id_soggiorno: nuovoIdSoggiorno,
+      stato_prenotazione: 'pending',
+    });
+  } catch (error: any) {
+    // Intercettiamo l'urlo dello Chef.
+    // Se il messaggio contiene "Overbooking", diamo uno status 409 (Conflitto). Altrimenti 500.
+    const statusCode = error.message.includes('Overbooking') ? 409 : 500;
+    res.status(statusCode).json({ error: error.message });
+  }
 };
 
 /**
@@ -183,11 +73,10 @@ export const aggiungiSoggiorno = (
  * ricalcolando i giorni di permanenza ed escludendo l'id corrente
  * dal controllo di overbooking.
  */
-export const modificaSoggiorno = (
-  req: Request<{ id: string }, {}, IModificaSoggiornoBody>,
+export const modificaSoggiorno = async (
+  req: Request,
   res: Response,
-): void => {
-  const db = getDb();
+): Promise<void> => {
   const id_soggiorno = req.params.id;
   const { data_check_in, data_check_out } = req.body;
 
@@ -398,19 +287,19 @@ export const getSoggiorniAttivi = (req: Request, res: Response): void => {
 export const sincronizzaManuale = async (req: Request, res: Response): Promise<void> => {
   try {
     const db = getDb();
-    
+
     // Invochiamo il core condiviso!
     await eseguiSincronizzazioneCore(db);
-    
+
     // Se non esplode nulla, andiamo a buon fine:
-    res.status(200).json({ 
-      success: true, 
-      message: 'Sincronizzazione calendari completata con successo!' 
+    res.status(200).json({
+      success: true,
+      message: 'Sincronizzazione calendari completata con successo!',
     });
   } catch (error: any) {
     // Se il core lancia un errore, rispondiamo al frontend come piace a noi:
-    res.status(500).json({ 
-      error: error.message || 'Errore interno durante la sincronizzazione.' 
+    res.status(500).json({
+      error: error.message || 'Errore interno durante la sincronizzazione.',
     });
   }
 };
@@ -435,8 +324,6 @@ export const getStatoPulizie = (req: Request, res: Response): void => {
     },
   );
 };
-
-
 
 // =========================================================================
 // 3. CONTROLLER GESTIONALI HOST ( Flussi Operativi e Ricerca)

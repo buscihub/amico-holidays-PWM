@@ -50,7 +50,7 @@ export interface ISoggiornoAttivo {
   id_alloggio: number;
   data_check_in: string;
   data_check_out: string;
-  stato_osservatorio_in: number;
+  segnato_osservatorio: number;
   stato_osservatorio_out: number;
   sorgente: string;
   nome_alloggio: string; // Ottenuto tramite JOIN con la tabella ALLOGGIO
@@ -229,7 +229,7 @@ export const recuperaSoggiorniAttivi = async (oggi: string): Promise<ISoggiornoA
 
 // 7. AZIONA CHECK-IN
 export const segnaCheckInDigitale = async (idSoggiorno: string): Promise<void> => {
-  await dbRun(`UPDATE SOGGIORNI SET stato_osservatorio_in = 1 WHERE id_soggiorno = ?`, [idSoggiorno]);
+  await dbRun(`UPDATE SOGGIORNI SET segnato_osservatorio = 1 WHERE id_soggiorno = ?`, [idSoggiorno]);
 };
 
 // 8. RICERCA STORICO

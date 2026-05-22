@@ -25,7 +25,7 @@ export const recuperaPendenti = async (): Promise<IPendente[]> => {
         FROM CLIENTE as cl
         JOIN SOGGIORNI as s ON s.id_soggiorno = cl.id_soggiorno
         JOIN ALLOGGIO as a ON a.id_alloggio = s.id_alloggio
-        WHERE s.stato_osservatorio_in = 0
+        WHERE s.segnato_osservatorio = 0
         ORDER BY s.data_check_in ASC
     `;
 
@@ -39,7 +39,7 @@ export const selezionati = async (ids: number[]): Promise<number> => {
 
   const sqlUpdateInBlocco = `
         UPDATE SOGGIORNI 
-        SET stato_osservatorio_in = 1 
+        SET segnato_osservario = 1 
         WHERE id_soggiorno IN (${placeholders})
     `;
 

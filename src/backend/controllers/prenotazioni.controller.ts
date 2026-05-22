@@ -3,7 +3,7 @@ import ical from 'node-ical';
 import { getDb } from '../db-config';
 import { RunResult } from 'sqlite3';
 import { eseguiSincronizzazioneCore } from '../services/sincronizzazione.service';
-import { creaSoggiorno } from '../services/prenotazioni.service';
+import { creaSoggiorno, aggiornaSoggiorno } from '../services/prenotazioni.service';
 
 // =========================================================================
 // 1. OPERAZIONI CRUD UTENTE / HOST (Gestione Prenotazioni e Blocchi)
@@ -74,7 +74,7 @@ export const aggiungiSoggiorno = async (req: Request, res: Response): Promise<vo
  * dal controllo di overbooking.
  */
 export const modificaSoggiorno = async (
-  req: Request,
+  req: Request<{ id: string }>,
   res: Response,
 ): Promise<void> => {
   const id_soggiorno = req.params.id;
@@ -94,65 +94,12 @@ export const modificaSoggiorno = async (
     return;
   }
 
-  // Recupero l'alloggio associato per poter fare il controllo di sovrapposizione date
-  db.get(
-    `SELECT id_alloggio FROM SOGGIORNI WHERE id_soggiorno = ?`,
-    [id_soggiorno],
-    (err, row: { id_alloggio: number } | undefined) => {
-      if (err || !row) {
-        res.status(404).json({ error: 'Soggiorno non trovato nel database.' });
-        return;
-      }
+  const nuovaPermanenza = await aggiornaSoggiorno(Number(req.params.id), req.body, permanenza);
 
-      // Escludiamo "id_soggiorno != ?" dalla query per evitare che il record vada in conflitto con se stesso
-      const sqlCheckDisponibilita = `SELECT id_soggiorno FROM SOGGIORNI WHERE id_alloggio = ? AND id_soggiorno != ? AND data_check_in < ? AND data_check_out > ?`;
-
-      db.get(
-        sqlCheckDisponibilita,
-        [row.id_alloggio, id_soggiorno, data_check_out, data_check_in],
-        (errCheck, overlap) => {
-          if (overlap) {
-            res
-              .status(409)
-              .json({ error: 'Impossibile modificare: le nuove date sono già occupate.' });
-            return;
-          }
-
-          // Transazione per aggiornare coerentemente date del soggiorno e giorni di permanenza dell'anagrafica
-          db.run('BEGIN TRANSACTION;');
-          db.run(
-            `UPDATE SOGGIORNI SET data_check_in = ?, data_check_out = ? WHERE id_soggiorno = ?`,
-            [data_check_in, data_check_out, id_soggiorno],
-            (errUp) => {
-              if (errUp) {
-                db.run('ROLLBACK;');
-                res.status(500).json({ error: errUp.message });
-                return;
-              }
-
-              db.run(
-                `UPDATE CLIENTE SET permanenza = ? WHERE id_soggiorno = ?`,
-                [permanenza, id_soggiorno],
-                (errCli) => {
-                  if (errCli) {
-                    db.run('ROLLBACK;');
-                    res.status(500).json({ error: errCli.message });
-                    return;
-                  }
-
-                  db.run('COMMIT;');
-                  res.status(200).json({
-                    message: 'Prenotazione modificata correttamente!',
-                    nuova_permanenza: permanenza,
-                  });
-                },
-              );
-            },
-          );
-        },
-      );
-    },
-  );
+  res.status(200).json({
+    message: 'Prenotazione modificata correttamente!',
+    nuova_permanenza: nuovaPermanenza,
+  });
 };
 
 /**

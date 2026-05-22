@@ -1,6 +1,7 @@
 import { checkPrime } from 'node:crypto';
 import { dbGet, dbAll, dbRun } from '../utils/db.util';
 import { ERROR } from 'sqlite3';
+import { last } from 'rxjs';
 
 // =========================================================================
 // INTERFACCE DI TIPIZZAZIONE (CONTRATTI DATI)
@@ -25,7 +26,7 @@ interface INuovoSoggiorno {
  * Rappresenta la struttura dei dati richiesti nel body
  * per la modifica delle date di un soggiorno esistente.
  */
-interface IModificaSoggiornoBody {
+interface IAggiornaSoggiornoBody {
   data_check_in: string;
   data_check_out: string;
 }
@@ -107,6 +108,63 @@ export const creaSoggiorno = async (dati: INuovoSoggiorno, permanenza: number): 
     await dbRun('COMMIT;');
 
     return lastID.id;
+  } catch (error) {
+    await dbRun('ROLLBACK');
+    throw error;
+  }
+};
+
+export const aggiornaSoggiorno = async (
+  id_soggiorno: number,
+  dati: IAggiornaSoggiornoBody,
+  permanenza: number,
+): Promise<number> => {
+  // Recupero l'alloggio associato per poter fare il controllo di sovrapposizione date
+  const sqlAlloggio = `SELECT id_alloggio
+                             FROM SOGGIORNI
+                             WHERE id_soggiorno = ?`;
+
+  const row = await dbGet<{ id_alloggio: number }>(sqlAlloggio, [id_soggiorno]);
+
+  // Se l'ID non esiste, lo Chef lancia un errore
+  if (!row) {
+    throw new Error('Soggiorno non trovato nel database.');
+  }
+
+  // Estraiamo il numero puro dall'oggetto restituito
+  const id_alloggio = row.id_alloggio;
+
+  const sqlCheckDisponibilita = `SELECT id_soggiorno 
+                                       FROM SOGGIORNI 
+                                       WHERE id_alloggio = ? 
+                                        AND id_soggiorno != ? 
+                                        AND data_check_in < ? 
+                                        AND data_check_out > ?`;
+
+  const dispParams = [id_alloggio, id_soggiorno, dati.data_check_out, dati.data_check_in];
+
+  const overlap = await dbGet(sqlCheckDisponibilita, dispParams);
+
+  if (overlap) {
+    throw new Error('Impossibile modificare: le nuove date sono già occupate.');
+  }
+
+  await dbRun(`BEGIN TRANSACTION;`);
+
+  try {
+    const sqlSoggAgg = `UPDATE SOGGIORNI 
+                                SET data_check_in = ?, 
+                                    data_check_out = ? 
+                                WHERE id_soggiorno = ?`;
+    const soggAggParams = [dati.data_check_in, dati.data_check_out, id_soggiorno];
+    await dbRun(sqlSoggAgg, soggAggParams);
+
+    const sqlClienAgg = `UPDATE CLIENTE SET permanenza = ? WHERE id_soggiorno = ?`;
+    const ClienAggParams = [permanenza, id_soggiorno];
+    await dbRun(sqlClienAgg, ClienAggParams);
+
+    await dbRun('COMMIT;');
+    return permanenza;
   } catch (error) {
     await dbRun('ROLLBACK');
     throw error;

@@ -6,7 +6,6 @@ import {
   bloccaDate,
   getDashboardStats,
   getSoggiorniAttivi,
-  getStatoPulizie,
   azionaCheckIn,
   storicoPrenotazioni
 } from '../controllers/prenotazioni.controller';
@@ -31,7 +30,6 @@ router.delete('/:id', rimuoviSoggiorno);
 // --- Rotte Dati Dashboard ---
 router.get('/dashboard/stats', getDashboardStats);
 router.get('/soggiorni/attivi', getSoggiorniAttivi);
-router.get('/alloggi/stato-pulizie', getStatoPulizie);
 
 // --- Azioni Gestionali Host ---
 router.put('/:id/checkin', azionaCheckIn);

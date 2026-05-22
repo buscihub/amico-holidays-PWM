@@ -13,7 +13,7 @@ import { last } from 'rxjs';
  */
 
 // Interfaccia per i dati in ingresso (che ci passa il controller)
-interface INuovoSoggiorno {
+export interface INuovoSoggiorno {
   id_alloggio: number;
   data_check_in: string;
   data_check_out: string;
@@ -26,7 +26,7 @@ interface INuovoSoggiorno {
  * Rappresenta la struttura dei dati richiesti nel body
  * per la modifica delle date di un soggiorno esistente.
  */
-interface IAggiornaSoggiornoBody {
+export interface IAggiornaSoggiornoBody {
   data_check_in: string;
   data_check_out: string;
 }
@@ -35,7 +35,7 @@ interface IAggiornaSoggiornoBody {
  * Rappresenta la struttura dati richiesta nel body
  * per l'inserimento di un blocco manuale sulle date.
  */
-interface IBloccoDateBody {
+export interface IBloccoDateBody {
   id_alloggio: number;
   data_check_in: string;
   data_check_out: string;
@@ -45,7 +45,7 @@ interface IBloccoDateBody {
  * Specifica i campi mappati per ogni riga restituita dalla query
  * di JOIN per i Soggiorni Attivi nella Dashboard.
  */
-interface ISoggiornoAttivo {
+export interface ISoggiornoAttivo {
   id_soggiorno: number;
   id_alloggio: number;
   data_check_in: string;
@@ -56,16 +56,11 @@ interface ISoggiornoAttivo {
   nome_alloggio: string; // Ottenuto tramite JOIN con la tabella ALLOGGIO
 }
 
-/**
- * Specifica i campi mappati per ogni riga restituita dalla query
- * per lo Stato delle Pulizie degli alloggi.
- */
-interface IStatoPuliziaAlloggio {
-  id_alloggio: number;
-  nome_alloggio: string;
-  stato_pulizia: number;
-}
+// =========================================================================
+// LOGICA DI BUSINESS E QUERY AL DATABASE
+// =========================================================================
 
+// 1. CREA SOGGIORNO
 export const creaSoggiorno = async (dati: INuovoSoggiorno, permanenza: number): Promise<number> => {
   // QUERY DI CONTROLLO ANTI-OVERBOOKING: Verifica intersezioni di date per lo stesso alloggio
   const sqlCheck = `SELECT id_soggiorno 
@@ -114,6 +109,7 @@ export const creaSoggiorno = async (dati: INuovoSoggiorno, permanenza: number): 
   }
 };
 
+// 2. AGGIORNA SOGGIORNO
 export const aggiornaSoggiorno = async (
   id_soggiorno: number,
   dati: IAggiornaSoggiornoBody,
@@ -169,4 +165,83 @@ export const aggiornaSoggiorno = async (
     await dbRun('ROLLBACK');
     throw error;
   }
+};
+
+// 3. ELIMINA SOGGIORNO
+export const eliminaSoggiorno = async (idSoggiorno: string | number): Promise<void> => {
+  await dbRun('BEGIN TRANSACTION;');
+  try {
+    await dbRun('DELETE FROM CLIENTE WHERE id_soggiorno = ?', [idSoggiorno]);
+    await dbRun('DELETE FROM SOGGIORNI WHERE id_soggiorno = ?', [idSoggiorno]);
+    await dbRun('COMMIT;');
+  } catch (error) {
+    await dbRun('ROLLBACK;');
+    throw error;
+  }
+};
+
+// 4. BLOCCA DATE MANUALE
+export const inserisciBloccoDate = async (dati: IBloccoDateBody): Promise<number> => {
+  const sqlCheckOccupato = `SELECT id_soggiorno FROM SOGGIORNI WHERE id_alloggio = ? AND data_check_in < ? AND data_check_out > ?`;
+  const overlap = await dbGet(sqlCheckOccupato, [dati.id_alloggio, dati.data_check_out, dati.data_check_in]);
+
+  if (overlap) {
+    throw new Error("L'alloggio risulta già occupato o bloccato in questo periodo.");
+  }
+
+  const sqlInsertBlocco = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente) VALUES (?, ?, ?, 'BloccatoSito')`;
+  const result = await dbRun(sqlInsertBlocco, [dati.id_alloggio, dati.data_check_in, dati.data_check_out]);
+  
+  return result.id;
+};
+
+// 5. DASHBOARD STATS
+export const calcolaStatistiche = async (oggi: string) => {
+  const qOccupate = `SELECT COUNT(DISTINCT id_alloggio) as conto FROM SOGGIORNI WHERE ? BETWEEN data_check_in AND data_check_out`;
+  const qArrivi = `SELECT COUNT(*) as conto FROM SOGGIORNI WHERE data_check_in = ? AND sorgente != 'BloccatoSito' AND sorgente != 'BloccatoAirbnb'`;
+  const qPartenze = `SELECT COUNT(*) as conto FROM SOGGIORNI WHERE data_check_out = ? AND sorgente != 'BloccatoSito' AND sorgente != 'BloccatoAirbnb'`;
+
+  const [occupate, arrivi, partenze] = await Promise.all([
+    dbGet<{ conto: number }>(qOccupate, [oggi]),
+    dbGet<{ conto: number }>(qArrivi, [oggi]),
+    dbGet<{ conto: number }>(qPartenze, [oggi])
+  ]);
+
+  return {
+    camereOccupate: occupate?.conto || 0,
+    inArrivo: arrivi?.conto || 0,
+    inPartenza: partenze?.conto || 0,
+    checkOutDaFare: partenze?.conto || 0,
+  };
+};
+
+// 6. SOGGIORNI ATTIVI
+export const recuperaSoggiorniAttivi = async (oggi: string): Promise<ISoggiornoAttivo[]> => {
+  const sql = `
+    SELECT S.*, A.nome_alloggio 
+    FROM SOGGIORNI S
+    JOIN ALLOGGIO A ON S.id_alloggio = A.id_alloggio
+    WHERE ? BETWEEN S.data_check_in AND S.data_check_out
+    ORDER BY S.data_check_out ASC
+  `;
+  return await dbAll<ISoggiornoAttivo>(sql, [oggi]); 
+};
+
+// 7. AZIONA CHECK-IN
+export const segnaCheckInDigitale = async (idSoggiorno: string): Promise<void> => {
+  await dbRun(`UPDATE SOGGIORNI SET stato_osservatorio_in = 1 WHERE id_soggiorno = ?`, [idSoggiorno]);
+};
+
+// 8. RICERCA STORICO
+export const cercaStorico = async (idAlloggio?: string): Promise<any[]> => {
+  let sql = `SELECT S.*, A.nome_alloggio FROM SOGGIORNI S JOIN ALLOGGIO A ON S.id_alloggio = A.id_alloggio`;
+  const params: any[] = [];
+
+  if (idAlloggio) {
+    sql += ` WHERE S.id_alloggio = ?`;
+    params.push(idAlloggio);
+  }
+
+  sql += ` ORDER BY S.data_check_in DESC`;
+  return await dbAll(sql, params);
 };

@@ -1,26 +1,11 @@
 import { Request, Response } from 'express';
-import ical from 'node-ical';
-import { getDb } from '../db-config';
-import { RunResult } from 'sqlite3';
+import * as PrenotazioniService from '../services/prenotazioni.service';
 import { eseguiSincronizzazioneCore } from '../services/sincronizzazione.service';
-import { creaSoggiorno, aggiornaSoggiorno } from '../services/prenotazioni.service';
 
-// =========================================================================
-// 1. OPERAZIONI CRUD UTENTE / HOST (Gestione Prenotazioni e Blocchi)
-// =========================================================================
-
-/**
- * @API POST /api/aggiungi-soggiorno
- * @Descrizione Registra una nuova prenotazione inserita manualmente dal sito,
- * effettuando controlli di overbooking e inserendo i dati in transazione
- * sia nella tabella SOGGIORNI che nella tabella CLIENTE.
- */
-export const aggiungiSoggiorno = async (req: Request, res: Response): Promise<void> => {
+export const aggiungiSoggiorno = async (req: Request<{}, {}, PrenotazioniService.INuovoSoggiorno>, res: Response): Promise<void> => {
   try {
-    const { id_alloggio, data_check_in, data_check_out, sesso, cittadinanza, luogo_residenza } =
-      req.body;
+    const { id_alloggio, data_check_in, data_check_out } = req.body;
 
-    // --- INIZIO VALIDAZIONE INPUT ---
     if (!id_alloggio || !data_check_in || !data_check_out) {
       res.status(400).json({ error: 'Dati obbligatori mancanti. Impossibile procedere.' });
       return;
@@ -43,316 +28,117 @@ export const aggiungiSoggiorno = async (req: Request, res: Response): Promise<vo
 
     const permanenza = Math.ceil((fine.getTime() - inizio.getTime()) / (1000 * 60 * 60 * 24));
     if (permanenza <= 0 || permanenza < 2) {
-      res.status(400).json({ error: 'La data non è valida o è inferiore al minimo di 2 notti.' });
+      res.status(400).json({ error: 'Filtro di business: Bisogna prenotare almeno per 2 notti.' });
       return;
     }
-    // --- FINE VALIDAZIONE INPUT ---
 
-    // LA MAGIA: Chiamiamo lo Chef e aspettiamo il risultato!
-    // Non c'è traccia di SQL qui dentro.
-    const nuovoIdSoggiorno = await creaSoggiorno(req.body, permanenza);
+    const nuovoIdSoggiorno = await PrenotazioniService.creaSoggiorno(req.body, permanenza);
 
-    // Serviamo il piatto al cliente
     res.status(200).json({
       success: true,
       message: 'Pre-prenotazione registrata! In attesa di pagamento su Airbnb.',
       id_soggiorno: nuovoIdSoggiorno,
-      stato_prenotazione: 'pending',
+      stato_prenotazione: 'pending'
     });
   } catch (error: any) {
-    // Intercettiamo l'urlo dello Chef.
-    // Se il messaggio contiene "Overbooking", diamo uno status 409 (Conflitto). Altrimenti 500.
     const statusCode = error.message.includes('Overbooking') ? 409 : 500;
     res.status(statusCode).json({ error: error.message });
   }
 };
 
-/**
- * @API PUT /api/:id
- * @Descrizione Modifica le date di check-in e check-out di un soggiorno esistente,
- * ricalcolando i giorni di permanenza ed escludendo l'id corrente
- * dal controllo di overbooking.
- */
-export const modificaSoggiorno = async (
-  req: Request<{ id: string }>,
-  res: Response,
-): Promise<void> => {
-  const id_soggiorno = req.params.id;
-  const { data_check_in, data_check_out } = req.body;
-
-  if (!data_check_in || !data_check_out) {
-    res.status(400).json({ error: 'Date obbligatorie per la modifica.' });
-    return;
-  }
-
-  const inizio = new Date(data_check_in);
-  const fine = new Date(data_check_out);
-  const permanenza = Math.ceil((fine.getTime() - inizio.getTime()) / (1000 * 60 * 60 * 24));
-
-  if (permanenza <= 0 || permanenza < 2) {
-    res.status(400).json({ error: 'Date non valide o inferiori al minimo di 2 notti.' });
-    return;
-  }
-
-  const nuovaPermanenza = await aggiornaSoggiorno(Number(req.params.id), req.body, permanenza);
-
-  res.status(200).json({
-    message: 'Prenotazione modificata correttamente!',
-    nuova_permanenza: nuovaPermanenza,
-  });
-};
-
-/**
- * @API DELETE /api/:id
- * @Descrizione Elimina una prenotazione rimuovendo in cascata prima i dati del cliente
- * e successivamente la riga del soggiorno, rispettando i vincoli di integrità.
- */
-export const rimuoviSoggiorno = (req: Request<{ id: string }>, res: Response): void => {
-  const db = getDb();
-  const id_soggiorno = req.params.id;
-
-  db.run('BEGIN TRANSACTION;');
-
-  // Rimozione record figlio (CLIENTE)
-  db.run('DELETE FROM CLIENTE WHERE id_soggiorno = ?', [id_soggiorno], (err) => {
-    if (err) {
-      db.run('ROLLBACK;');
-      res.status(500).json({ error: err.message });
-      return;
-    }
-
-    // Rimozione record padre (SOGGIORNI)
-    db.run('DELETE FROM SOGGIORNI WHERE id_soggiorno = ?', [id_soggiorno], (errSogg) => {
-      if (errSogg) {
-        db.run('ROLLBACK;');
-        res.status(500).json({ error: errSogg.message });
-        return;
-      }
-
-      db.run('COMMIT;');
-      res.status(200).json({ message: 'Prenotazione rimossa con successo dal sistema.' });
-    });
-  });
-};
-
-/**
- * @API POST /api/blocca-date
- * @Descrizione Permette all'Host di bloccare manualmente un range di date
- * (es. per manutenzione straordinaria) impostando la sorgente su 'BloccatoSito'.
- */
-export const bloccaDate = (req: Request<{}, {}, IBloccoDateBody>, res: Response): void => {
-  const db = getDb();
-  const { id_alloggio, data_check_in, data_check_out } = req.body;
-
-  const sqlCheckOccupato = `SELECT id_soggiorno FROM SOGGIORNI WHERE id_alloggio = ? AND data_check_in < ? AND data_check_out > ?`;
-
-  db.get(sqlCheckOccupato, [id_alloggio, data_check_out, data_check_in], (err, row) => {
-    if (row) {
-      res
-        .status(409)
-        .json({ error: "L'alloggio risulta già occupato o bloccato in questo periodo." });
-      return;
-    }
-
-    const sqlInsertBlocco = `INSERT INTO SOGGIORNI (id_alloggio, data_check_in, data_check_out, sorgente) VALUES (?, ?, ?, 'BloccatoSito')`;
-    db.run(
-      sqlInsertBlocco,
-      [id_alloggio, data_check_in, data_check_out],
-      function (this: RunResult, errInsert) {
-        if (errInsert) {
-          res.status(500).json({ error: errInsert.message });
-          return;
-        }
-        res
-          .status(201)
-          .json({ message: 'Alloggio bloccato correttamente.', id_blocco: this.lastID });
-      },
-    );
-  });
-};
-
-// =========================================================================
-// 2. CONTROLLER DATA ACQUISITION & MONITORING (Aggregazione Dati Dashboard)
-// =========================================================================
-
-/**
- * @API GET /api/dashboard/stats
- * @Descrizione Elabora i conteggi statistici in tempo reale per i 4 Box in alto
- * della Dashboard analizzando la data odierna (YYYY-MM-DD).
- */
-export const getDashboardStats = (req: Request, res: Response): void => {
-  const db = getDb();
-  const oggi = new Date().toISOString().split('T')[0]; // Genera la data odierna in formato ISO YYYY-MM-DD
-
-  // Query asincrone parallele per calcolare le metriche della giornata
-  const qOccupate = `SELECT COUNT(DISTINCT id_alloggio) as conto FROM SOGGIORNI WHERE ? BETWEEN data_check_in AND data_check_out`;
-  const qArrivi = `SELECT COUNT(*) as conto FROM SOGGIORNI WHERE data_check_in = ? AND sorgente != 'BloccatoSito' AND sorgente != 'BloccatoAirbnb'`;
-  const qPartenze = `SELECT COUNT(*) as conto FROM SOGGIORNI WHERE data_check_out = ? AND sorgente != 'BloccatoSito' AND sorgente != 'BloccatoAirbnb'`;
-
-  db.get(qOccupate, [oggi], (err, rowOccupate: { conto: number } | undefined) => {
-    db.get(qArrivi, [oggi], (err2, rowArrivi: { conto: number } | undefined) => {
-      db.get(qPartenze, [oggi], (err3, rowPartenze: { conto: number } | undefined) => {
-        // Risposta unificata aggregando i singoli risultati dei conteggi
-        res.json({
-          camereOccupate: rowOccupate?.conto || 0,
-          inArrivo: rowArrivi?.conto || 0,
-          inPartenza: rowPartenze?.conto || 0,
-          checkOutDaFare: rowPartenze?.conto || 0,
-        });
-      });
-    });
-  });
-};
-
-/**
- * @API GET /api/soggiorni/attivi
- * @Descrizione Estrae l'elenco di tutti i soggiorni in corso nella data odierna,
- * effettuando una JOIN con la tabella ALLOGGIO per visualizzare il nome testuale della stanza.
- */
-export const getSoggiorniAttivi = (req: Request, res: Response): void => {
-  const db = getDb();
-  const oggi = new Date().toISOString().split('T')[0];
-
-  const sql = `
-    SELECT S.*, A.nome_alloggio 
-    FROM SOGGIORNI S
-    JOIN ALLOGGIO A ON S.id_alloggio = A.id_alloggio
-    WHERE ? BETWEEN S.data_check_in AND S.data_check_out
-    ORDER BY S.data_check_out ASC
-  `;
-
-  db.all(sql, [oggi], (err, rows: ISoggiornoAttivo[]) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
-};
-
-// GET /api/sincronizza-ical
-export const sincronizzaManuale = async (req: Request, res: Response): Promise<void> => {
+export const modificaSoggiorno = async (req: Request<{ id: string }, {}, PrenotazioniService.IAggiornaSoggiornoBody>, res: Response): Promise<void> => {
   try {
-    const db = getDb();
+    const { data_check_in, data_check_out } = req.body;
 
-    // Invochiamo il core condiviso!
-    await eseguiSincronizzazioneCore(db);
+    if (!data_check_in || !data_check_out) {
+      res.status(400).json({ error: 'Date obbligatorie per la modifica.' });
+      return;
+    }
 
-    // Se non esplode nulla, andiamo a buon fine:
+    const inizio = new Date(data_check_in);
+    const fine = new Date(data_check_out);
+    const permanenza = Math.ceil((fine.getTime() - inizio.getTime()) / (1000 * 60 * 60 * 24));
+
+    if (permanenza <= 0 || permanenza < 2) {
+      res.status(400).json({ error: 'Date non valide o inferiori al minimo di 2 notti.' });
+      return;
+    }
+
+    const nuovaPermanenza = await PrenotazioniService.aggiornaSoggiorno(Number(req.params.id), req.body, permanenza);
+
     res.status(200).json({
-      success: true,
-      message: 'Sincronizzazione calendari completata con successo!',
+      message: 'Prenotazione modificata correttamente!',
+      nuova_permanenza: nuovaPermanenza,
     });
   } catch (error: any) {
-    // Se il core lancia un errore, rispondiamo al frontend come piace a noi:
-    res.status(500).json({
-      error: error.message || 'Errore interno durante la sincronizzazione.',
-    });
+    res.status(500).json({ error: error.message });
   }
 };
 
-/**
- * @API GET /api/alloggi/stato-pulizie
- * @Descrizione Recupera lo stato corrente delle pulizie di ciascun alloggio presente
- * nel sistema per popolare il widget di destra della Dashboard.
- */
-export const getStatoPulizie = (req: Request, res: Response): void => {
-  const db = getDb();
-
-  db.all(
-    `SELECT id_alloggio, nome_alloggio, stato_pulizia FROM ALLOGGIO`,
-    [],
-    (err, rows: IStatoPuliziaAlloggio[]) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.json(rows);
-    },
-  );
-};
-
-// =========================================================================
-// 3. CONTROLLER GESTIONALI HOST ( Flussi Operativi e Ricerca)
-// =========================================================================
-
-/**
- * @API PUT /api/alloggi/:id/pulizie
- * @Descrizione Permette all'Host o al Co-Host di cambiare lo stato di pulizia
- * di una stanza (0 = Da Pulire, 1 = Pulita).
- */
-export const aggiornaPulizie = (
-  req: Request<{ id: string }, {}, { stato_pulizia: number }>,
-  res: Response,
-): void => {
-  const db = getDb();
-  const { id } = req.params;
-  const { stato_pulizia } = req.body;
-
-  db.run(
-    `UPDATE ALLOGGIO SET stato_pulizia = ? WHERE id_alloggio = ?`,
-    [stato_pulizia, id],
-    (err) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.json({ message: 'Stato pulizia alloggio aggiornato con successo!' });
-    },
-  );
-};
-
-/**
- * @API PUT /api/:id/checkin
- * @Descrizione Esegue il "Check-in Digitale" dell'ospite in struttura, marcando
- * il flag stato_osservatorio_in a 1 (Pronto per l'esportazione burocratica).
- */
-export const azionaCheckIn = (req: Request<{ id: string }>, res: Response): void => {
-  const db = getDb();
-
-  db.run(
-    `UPDATE SOGGIORNI SET stato_osservatorio_in = 1 WHERE id_soggiorno = ?`,
-    [req.params.id],
-    (err) => {
-      if (err) {
-        res.status(500).json({ error: err.message });
-        return;
-      }
-      res.json({ message: 'Check-in registrato internamente nel PMS.' });
-    },
-  );
-};
-
-/**
- * @API GET /api/storico/ricerca
- * @Descrizione Gestisce la pagina dello Storico delle Prenotazioni, permettendo
- * all'Host di filtrare i risultati per un alloggio specifico tramite Query Parameter opzionale (?id_alloggio=X).
- */
-export const storicoPrenotazioni = (
-  req: Request<{}, {}, {}, { id_alloggio?: string }>,
-  res: Response,
-): void => {
-  const db = getDb();
-  const { id_alloggio } = req.query; // Estrazione del filtro opzionale dall'URL
-
-  // Query base di selezione con JOIN per mostrare il nome dell'alloggio
-  let sql = `SELECT S.*, A.nome_alloggio FROM SOGGIORNI S JOIN ALLOGGIO A ON S.id_alloggio = A.id_alloggio`;
-  const params: any[] = [];
-
-  // APPLICAZIONE DINAMICA DEL FILTRO SQL: Se l'host ha selezionato una stanza specifica, aggiungo la clausola WHERE
-  if (id_alloggio) {
-    sql += ` WHERE S.id_alloggio = ?`;
-    params.push(id_alloggio);
+export const rimuoviSoggiorno = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  try {
+    await PrenotazioniService.eliminaSoggiorno(req.params.id);
+    res.status(200).json({ message: 'Prenotazione rimossa con successo dal sistema.' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
+};
 
-  // Ordiniamo le prenotazioni partendo dalle più recenti in assoluto
-  sql += ` ORDER BY S.data_check_in DESC`;
+export const bloccaDate = async (req: Request<{}, {}, PrenotazioniService.IBloccoDateBody>, res: Response): Promise<void> => {
+  try {
+    const { id_alloggio, data_check_in, data_check_out } = req.body;
+    const nuovoId = await PrenotazioniService.inserisciBloccoDate({ id_alloggio, data_check_in, data_check_out });
+    
+    res.status(201).json({ message: 'Alloggio bloccato correttamente.', id_blocco: nuovoId });
+  } catch (error: any) {
+    const status = error.message.includes('occupato') ? 409 : 500;
+    res.status(status).json({ error: error.message });
+  }
+};
 
-  db.all(sql, params, (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-      return;
-    }
-    res.json(rows);
-  });
+export const getDashboardStats = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const oggi = new Date().toISOString().split('T')[0];
+    const stats = await PrenotazioniService.calcolaStatistiche(oggi);
+    res.json(stats);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getSoggiorniAttivi = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const oggi = new Date().toISOString().split('T')[0];
+    const soggiorni = await PrenotazioniService.recuperaSoggiorniAttivi(oggi);
+    res.json(soggiorni);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const sincronizzaManuale = async (req: Request, res: Response): Promise<void> => {
+  try {
+    await eseguiSincronizzazioneCore();
+    res.status(200).json({ success: true, message: 'Sincronizzazione calendari completata con successo!' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Errore interno durante la sincronizzazione.' });
+  }
+};
+
+export const azionaCheckIn = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  try {
+    await PrenotazioniService.segnaCheckInDigitale(req.params.id);
+    res.json({ message: 'Check-in registrato internamente nel PMS.' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const storicoPrenotazioni = async (req: Request<{}, {}, {}, { id_alloggio?: string }>, res: Response): Promise<void> => {
+  try {
+    const storico = await PrenotazioniService.cercaStorico(req.query.id_alloggio);
+    res.json(storico);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 };

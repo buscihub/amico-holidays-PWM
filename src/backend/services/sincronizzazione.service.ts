@@ -1,5 +1,6 @@
 import ical from 'node-ical';
 import { Database } from 'sqlite3';
+import { getDb } from '../db-config';
 
 // Helper per la data
 const formatDataDB = (data: Date): string => {
@@ -9,7 +10,8 @@ const formatDataDB = (data: Date): string => {
   return `${anno}-${mese}-${gg}`;
 };
 
-export const eseguiSincronizzazioneCore = async (db: Database): Promise<void> => {
+export const eseguiSincronizzazioneCore = async (): Promise<void> => {
+  const db = getDb()
   return new Promise((resolve, reject) => {
     // 1. PULIZIA PENDING SCADUTI
     const sqlGarbageCollection = `

@@ -125,10 +125,15 @@ export const sincronizzaManuale = async (req: Request, res: Response): Promise<v
   }
 };
 
+/**
+ * @API PUT /api/:id/osservatorio-invia
+ * @Descrizione Cambia lo stato dell'osservatorio per il singolo soggiorno a 1
+ * (Pronto/Inviato all'esportazione burocratica).
+ */
 export const azionaCheckIn = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   try {
     await PrenotazioniService.segnaCheckInDigitale(req.params.id);
-    res.json({ message: 'Check-in registrato internamente nel PMS.' });
+    res.json({ message: 'Soggiorno contrassegnato come pronto per l\'osservatorio.' });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

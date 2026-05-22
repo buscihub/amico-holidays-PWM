@@ -1,7 +1,7 @@
-import { dbGet, dbAll, dbRun } from '../utils/db.util';
+import { dbAll, dbRun } from '../utils/db.util';
 
-// Definiamo cosa ci aspettiamo dal database (Ottimo per la documentazione!)
-export interface IPendente {
+// Interfaccia aggiornata con la nuova colonna del DB
+export interface IOspiteOsservatorio {
   id_cliente: number;
   id_soggiorno: number;
   nome_alloggio: string;
@@ -12,8 +12,14 @@ export interface IPendente {
   permanenza: number;
 }
 
-export const recuperaPendenti = async (): Promise<IPendente[]> => {
-  const sqlGetPendInfo = `
+export const recuperaOspitiFiltrati = async (
+  stato: number, 
+  mese?: string, 
+  anno?: string
+): Promise<IOspiteOsservatorio[]> => {
+  
+  // Query base: filtriamo subito per lo stato (0 = Da Segnare, 1 = Già Segnato)
+  let sql = `
         SELECT cl.id_cliente, 
                cl.id_soggiorno,     
                a.nome_alloggio, 
@@ -25,27 +31,30 @@ export const recuperaPendenti = async (): Promise<IPendente[]> => {
         FROM CLIENTE as cl
         JOIN SOGGIORNI as s ON s.id_soggiorno = cl.id_soggiorno
         JOIN ALLOGGIO as a ON a.id_alloggio = s.id_alloggio
-        WHERE s.segnato_osservatorio = 0
-        ORDER BY s.data_check_in ASC
-    `;
+        WHERE s.segnato_osservatorio = ?
+  `;
+  
+  const params: any[] = [stato];
 
-  // Usiamo il nostro helper dbAll che supporta i tipi generici <IPendente>
-  return await dbAll<IPendente>(sqlGetPendInfo);
+  // Se l'host vuole vedere i record di un mese specifico (es. per lo storico)
+  if (mese && anno) {
+    sql += ` AND strftime('%m', s.data_check_in) = ? AND strftime('%Y', s.data_check_in) = ?`;
+    params.push(mese, anno);
+  }
+
+  sql += ` ORDER BY s.data_check_in ASC`;
+
+  return await dbAll<IOspiteOsservatorio>(sql, params);
 };
 
+// Manteniamo la tua funzione di conferma in blocco (aggiornata con la nuova colonna)
 export const selezionati = async (ids: number[]): Promise<number> => {
-  // Trasformiamo l'array di ID in una stringa di punti interrogativi (Es: [12, 15] -> "?, ?")
-  const placeholders = ids.map(() => '?').join(', ');
-
-  const sqlUpdateInBlocco = `
+    const placeholders = ids.map(() => '?').join(', ');
+    const sqlUpdateInBlocco = `
         UPDATE SOGGIORNI 
-        SET segnato_osservario = 1 
+        SET segnato_osservatorio = 1 
         WHERE id_soggiorno IN (${placeholders})
     `;
-
-  // Usiamo await e salviamo l'oggetto restituito dal nostro magazziniere!
-  const result = await dbRun(sqlUpdateInBlocco, ids);
-
-  // result.changes contiene esattamente il numero di righe modificate
-  return result.changes;
+    const result = await dbRun(sqlUpdateInBlocco, ids);
+    return result.changes; 
 };

@@ -6,8 +6,7 @@ export const startSincJob = (): void => {
   cron.schedule('*/10 * * * *', async () => { // Ogni 10 minuti
     console.log('\n--- 🔄 Avvio Sincronizzazione Automatica iCal ---');
     try {
-      const db = getDb();
-      await eseguiSincronizzazioneCore(db);
+      await eseguiSincronizzazioneCore();
       console.log('✅ Sincronizzazione automatica completata senza errori.');
     } catch (error: any) {
       console.error('❌ Errore Cron Job:', error.message);

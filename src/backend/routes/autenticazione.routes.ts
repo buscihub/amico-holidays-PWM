@@ -9,4 +9,5 @@ router.post('/login', loginHost);
 // Creiamo la rotta POST per il logout, che richiama la funzione logoutHost del controller
 router.post('/logout', logoutHost);
 
+
 export default router;

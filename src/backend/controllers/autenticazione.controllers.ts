@@ -1,58 +1,51 @@
 import { Request, Response } from 'express';
-import { getDb } from '../db-config'; // Importa getDb da qui
-import bcrypt from 'bcrypt'; // Servirà per verificare la password
+import * as AutenticazioneService from '../services/autenticazione.service';
 
-export const loginHost = (req: Request, res: Response): any => {
-    const db = getDb();
+export const loginHost = async (req: Request, res: Response): Promise<void> => {
+  // Il "try/catch" è fondamentale con async/await. 
+  // Se qualcosa va storto nel blocco "try", si salta subito al blocco "catch".
+  try {
+    // 1. IL CAMERIERE PRENDE L'ORDINE
+    // Estraiamo email e password dal "corpo" (body) della richiesta arrivata da internet.
+    const { email, password } = req.body;
 
-    //recuperiamo email e password dal database
-    const {email, password} = req.body;
-
-    //verifichiamo che email e password siano state fornite
-    if(!email || !password){
-        return res.status(400).json({error: 'Email e password sono obbligatorie.'});
+    // 2. CONTROLLO DI BASE
+    if (!email || !password) {
+       // Se mancano i dati, fermiamo tutto (return) e mandiamo errore 400 (Bad Request)
+       res.status(400).json({ error: 'Email e password sono obbligatorie.' });
+       return;
     }
 
-    //cerchiamo l'host nel database tramite l'email
-    const sql = `SELECT * FROM STAFF WHERE email = ?`;
-    db.get(sql, [email], async(err, staff: any) => {
-        if(err){
-            return res.status(500).json({error: 'Errore durante l\'accesso al database:' + err.message});
-        }
+    // 3. IL CAMERIERE CHIAMA LO CHEF
+    // Passiamo i dati puliti al Service. Usiamo "await" per aspettare che finisca i controlli.
+    const datiUtente = await AutenticazioneService.verificaCredenziali(email, password);
 
-        //controlliamo se l'utente esiste 
-        if(!staff){
-            return res.status(401).json({error: 'Utente non trovato.'});
-        }
-
-        try{
-            //verifichiamo la password confrontando l'hash memorizzato nel db con la password fornita
-            const pwdValida = await bcrypt.compare(password, staff.password_hash);
-            if(!pwdValida){
-                return res.status(401).json({error: 'Password errata.'});
-            }
-            return res.status(200).json({
-                message: 'Login effettuato.',
-                utente: {
-                    id: staff.id_staff,
-                    email: staff.email,
-                    ruolo: staff.ruolo
-                }
-            });
-        }
-        catch(error: any){
-            return res.status(500).json({error: `Errore durante la verifica della password: ${error.message}`});
-        }
+    // 4. IL CAMERIERE SERVE IL PIATTO
+    // Se lo Chef non ha lanciato errori, il login è ok. Mandiamo stato 200 (OK).
+    res.status(200).json({
+      message: 'Login effettuato.',
+      utente: datiUtente
     });
-}
 
-export const logoutHost = (req: Request, res: Response): any => {
-    // Se in futuro userai i cookie per salvare un Token JWT, qui scriverai:
-    // res.clearCookie('token');
+  } catch (error: any) {
+    // 5. GESTIONE DEGLI ERRORI
+    // Se lo Chef nel Service ha fatto "throw new Error()", cadiamo in questo blocco.
+    
+    // Decidiamo il codice HTTP. Se l'errore è "Utente non trovato" o "Password errata", 
+    // lo stato è 401 (Unauthorized). Altrimenti è un errore del server 500.
+    const statusCode = error.message.includes('Utente non trovato') || error.message.includes('Password errata') ? 401 : 500;
+    
+    res.status(statusCode).json({ error: error.message });
+  }
+};
 
-    // Per ora, restituiamo semplicemente un messaggio di successo.
-    // Sarà compito del Frontend (React/Vue) cancellare i dati dell'utente dal LocalStorage.
-    return res.status(200).json({ 
-        message: 'Logout effettuato con successo. A presto!' 
+export const logoutHost = async (req: Request, res: Response): Promise<void> => {
+  try {
+    // Il logout di base non ha bisogno del database, quindi il Cameriere fa tutto da solo.
+    res.status(200).json({ 
+      message: 'Logout effettuato con successo. A presto!' 
     });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 };

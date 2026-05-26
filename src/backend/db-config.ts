@@ -74,13 +74,16 @@ export const initDb = () => {
     );
 
     // Tabella SOGGIORNI
+    // data_creazione_record: memorizza la data di creazione del record per risolvere un conflitto col cron job
+    // stato_prenotazione: indica se una prenotazione fatta dal sito è già stata confermata o meno
     db.run(`CREATE TABLE IF NOT EXISTS SOGGIORNI (
               id_soggiorno INTEGER PRIMARY KEY AUTOINCREMENT,
               id_alloggio INTEGER,
               data_check_in TEXT NOT NULL,
               data_check_out TEXT NOT NULL,
-              stato_osservatorio_in INTEGER DEFAULT 0,
-              stato_osservatorio_out INTEGER DEFAULT 0,
+              segnato_osservatorio INTEGER DEFAULT 0,
+              stato_prenotazione TEXT,
+              data_creazione_record DATETIME,
               sorgente TEXT DEFAULT 'airbnb',
               FOREIGN KEY(id_alloggio) REFERENCES ALLOGGIO(id_alloggio)
           )`);

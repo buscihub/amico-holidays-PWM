@@ -1,13 +1,19 @@
+
 import { Router } from 'express';
-import { getAlloggi} from '../controllers/alloggi.controllers';
-import { putClean} from '../controllers/alloggi.controllers'
+import * as AlloggiController from '../controllers/alloggi.controller';
 
 const router = Router();
 
-router.get('/alloggi', getAlloggi);
+// GET /api/alloggi -> Prende tutti gli alloggi (e mappa gli stati in booleani)
+router.get('/', AlloggiController.getAlloggi);
 
-// Rotta per aggiornare lo stato pulizia (accetta l'ID sia nell'URL che nel body)
-router.put('/alloggi', putClean);      // Per chiamate con ID nel JSON body
-router.put('/alloggi/:id', putClean); // Per chiamate con ID nell'URL (es: /alloggi/1)
+// PUT /api/alloggi/clean -> Inverte lo stato della pulizia (accetta l'ID nel body o nell'URL)
+router.put('/clean', AlloggiController.putClean);
+router.put('/clean/:id', AlloggiController.putClean); // Supporta anche l'ID direttamente nell'URL (es: /api/alloggi/clean/1)
 
-export const alloggiRoutes = router;
+// PUT /api/alloggi/kit -> Inverte lo stato del kit benvenuto (accetta l'ID nel body o nell'URL)
+router.put('/kit', AlloggiController.putKit);
+router.put('/kit/:id', AlloggiController.putKit); // Es: /api/alloggi/kit/1
+
+
+export { router as alloggiRoutes };

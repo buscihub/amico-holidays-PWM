@@ -58,8 +58,4 @@ export const aggiornaKitBenvenuto = async (idAlloggio: number): Promise<IAlloggi
   const rows = await dbAll<IAlloggio>(selectSql, [idAlloggio]);
   
   return rows.length > 0 ? rows[0] : null;
-  
-
 }
-
-

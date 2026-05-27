@@ -1,4 +1,3 @@
-
 import { Router } from 'express';
 import { verificaToken } from '../routes/autenticazione.middleware';
 import * as AlloggiController from '../controllers/alloggi.controller';

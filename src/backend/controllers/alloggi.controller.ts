@@ -97,18 +97,7 @@ export const putKit = async(req: Request, res: Response):Promise<void> =>{
         ical_url: KitAggiornato.link_ical || null
       },
     });
-}
-catch(error: any) {
+  }catch(error: any) {
     res.status(500).json({ error: error.message || 'Errore durante l\'aggiornamento del kit benvenuto.' });
-
+  }
 }
-
-}
-    
-
-
-
-
-
-
-

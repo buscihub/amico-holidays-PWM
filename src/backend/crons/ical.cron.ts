@@ -1,5 +1,4 @@
 import cron from 'node-cron';
-import { getDb } from '../db-config';
 import { eseguiSincronizzazioneCore } from '../services/sincronizzazione.service';
 
 export const startSincJob = (): void => {

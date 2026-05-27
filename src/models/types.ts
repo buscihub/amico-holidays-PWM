@@ -4,49 +4,58 @@
  * Utenti abilitati all'accesso della Dashboard (Host e CoHost)
  */
 export interface Staff {
-  id_staff?: number; // Opzionale perché quando crei un utente non hai ancora l'ID dal DB
-  nome: string;
-  cognome: string;
+  id_staff?: number; 
   email: string;
-  password_hash: string; // Mai salvare le password in chiaro!
-  ruolo: 'host' | 'cohost'; // TypeScript impedirà di inserire ruoli non validi
+  password_hash?: string; // Opzionale perché NON lo inviamo mai al frontend
+  ruolo: 'host' | 'cohost'; 
+  token?: string; // Utile da avere qui, dato che il login restituisce il JWT!
 }
 
 /**
- * Le tre unità immobiliari: Casa Pretoria, Stanza Massimo, Stanza Cattedrale
+ * Le tre unità immobiliari del B&B
  */
 export interface Alloggio {
   id_alloggio?: number;
-  nome_alloggio: 'Pretoria' | 'Massimo' | 'Cattedrale';
-  stato_pulizia: boolean; // true = pulito, false = da pulire
-  kit_benvenuto: boolean; // true = presente, false = da rimpiazzare
-  link_airbnb?: string; // Opzionale, serve per il redirect
-  link_ical?: string;   // Opzionale, serve per la sincronizzazione del backend
+  nome_alloggio: 'Pretoria' | 'Massimo' | 'Cattedrale' | string;
+  stato_pulizia: boolean; // Il Controller li mappa da 0/1 a boolean
+  kit_benvenuto: boolean; // Il Controller li mappa da 0/1 a boolean
+  link_airbnb?: string | null; 
+  link_ical?: string | null; 
 }
 
 /**
- * I periodi di occupazione delle stanze, importati da Airbnb o generati
+ * I periodi di occupazione delle stanze
  */
 export interface Soggiorno {
   id_soggiorno?: number;
-  id_alloggio: number; // Foreign Key verso Alloggio
+  id_alloggio: number; 
   data_check_in: string; // Formato ISO ('YYYY-MM-DD')
   data_check_out: string; // Formato ISO ('YYYY-MM-DD')
-  stato_osservatorio_check_in: boolean;  // Per la burocrazia (0/1 nel DB, boolean in TS)
-  stato_osservatorio_check_out: boolean; // Per la burocrazia
-  sorgente: 'airbnb' | 'manuale'; // Da dove arriva la prenotazione
+  segnato_osservatorio: number | boolean; // Backend usa 0/1, il frontend può trattarlo come boolean
+  stato_prenotazione?: 'pending' | 'confirmed'; 
+  data_creazione_record?: string;
+  sorgente: 'PrenotazioneAirbnb' | 'PrenotazioneSito' | 'BloccatoAirbnb' | 'BloccatoSito'; 
 }
 
 /**
- * I dati anagrafici raccolti per l'Osservatorio Turistico (Comune di Palermo)
+ * I dati statistici raccolti per l'Osservatorio Turistico 
+ * (Anonimizzati senza nome e cognome come da DB)
  */
 export interface Cliente {
   id_cliente?: number;
-  id_soggiorno: number; // Foreign Key verso Soggiorno (per collegare l'anagrafica alle date)
-  nome: string;
-  cognome: string;
-  sesso: 'Uomo' | 'Donna' | 'Non specificato';
+  id_soggiorno: number; 
+  sesso: 'M' | 'F' | string; // Allineato col frontend
   cittadinanza: string;
   luogo_residenza: string;
-  permanenza: number; // Calcolato in automatico (differenza notti)
+  permanenza: number; 
+}
+
+/**
+ * Interfaccia extra utile per i dati della Dashboard (che avevamo nel Service!)
+ */
+export interface DashboardStats {
+  camereOccupate: number;
+  inArrivo: number;
+  inPartenza: number;
+  checkOutDaFare: number;
 }

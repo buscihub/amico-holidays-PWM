@@ -1,6 +1,4 @@
-import { resolve } from "path";
 import { getDb } from "../db-config";
-import { rejects } from "assert";
 
 /** const db = getDb() messo in questa posizione questo comando viene eseguito immediatamente non appena importiamo questo
  * file da qualche parte nel progetto. Node.js lo eseguirà prima che server.ts abbia avuto il tempo di chiamare initDb(), cioè

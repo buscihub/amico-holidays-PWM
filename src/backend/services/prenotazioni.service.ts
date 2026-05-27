@@ -1,7 +1,4 @@
-import { checkPrime } from 'node:crypto';
 import { dbGet, dbAll, dbRun } from '../utils/db.util';
-import { ERROR } from 'sqlite3';
-import { last } from 'rxjs';
 
 // =========================================================================
 // INTERFACCE DI TIPIZZAZIONE (CONTRATTI DATI)
@@ -69,7 +66,7 @@ export const creaSoggiorno = async (dati: INuovoSoggiorno, permanenza: number): 
                             AND data_check_in < ? 
                             AND data_check_out > ?`;
 
-  const checkParams = [dati.id_alloggio, dati.data_check_in, dati.data_check_out];
+  const checkParams = [dati.id_alloggio, dati.data_check_out, dati.data_check_in];
 
   const overlap = await dbGet(sqlCheck, checkParams);
 
@@ -83,8 +80,12 @@ export const creaSoggiorno = async (dati: INuovoSoggiorno, permanenza: number): 
     const sqlSoggiorno = `INSERT INTO SOGGIORNI 
                                     (id_alloggio, data_check_in, data_check_out, sorgente, stato_prenotazione, data_creazione_record) 
                                   VALUES (?, ?, ?, 'PrenotazioneSito', 'pending', CURRENT_TIMESTAMP)`;
+    
+    //Creiamo un array specifico con prima check_in e poi check_out da passare alla INSERT
+    const insertSoggiornoParams = [dati.id_alloggio, dati.data_check_in, dati.data_check_out];
 
-    const lastID = await dbRun(sqlSoggiorno, checkParams);
+    //passiamo i parametri corretti alla INSERT
+    const lastID = await dbRun(sqlSoggiorno, insertSoggiornoParams);
 
     const sqlCliente = `INSERT INTO CLIENTE 
                                     (id_soggiorno, sesso, cittadinanza, luogo_residenza, permanenza) 

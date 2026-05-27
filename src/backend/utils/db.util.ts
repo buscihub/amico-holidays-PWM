@@ -2,7 +2,10 @@ import { resolve } from "path";
 import { getDb } from "../db-config";
 import { rejects } from "assert";
 
-const db = getDb()
+/** const db = getDb() messo in questa posizione questo comando viene eseguito immediatamente non appena importiamo questo
+ * file da qualche parte nel progetto. Node.js lo eseguirà prima che server.ts abbia avuto il tempo di chiamare initDb(), cioè
+ * prima di inizializzare il database. Per risolvere inseriamo il comando all'interno di ogni singola funzione nel momento in
+ * cui serve
 
 /**
  * 🛠️ IL MAGAZZINIERE: dbRun
@@ -21,6 +24,7 @@ export const dbRun = (
     params: any[] = []
 ): Promise<{id: number; changes: number}> => {
     return new Promise((resolve, reject)=> {
+        const db = getDb(); //inseriamo il comando qui
         // Usiamo function() normale invece della freccia per poter accedere a 'this.lastID'
         db.run(sql, params, function(err){
             if (err) {
@@ -48,6 +52,7 @@ export const dbRun = (
 
 export const dbGet = <T>(sql: string,params: any[] = []): Promise<T | undefined> => {
     return new Promise((resolve, reject) => {
+        const db = getDb(); //inseriamo il comando qui
         db.get(sql, params, function(err, row){
             if (err) {
                 reject(err)                
@@ -70,6 +75,7 @@ export const dbGet = <T>(sql: string,params: any[] = []): Promise<T | undefined>
  */
 export const dbAll = <T>(sql: string, params: any[] = []): Promise<T[]> => {
     return new Promise((resolve, reject) => {
+        const db = getDb(); //inseriamo il comando qui
         db.all(sql, params, function(err, rows){
             if (err) {
                 reject(err)

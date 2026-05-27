@@ -1,4 +1,5 @@
 import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken'
 import { dbGet } from '../utils/db.util';
 
 // INTERFACCIA: Definisce la struttura della riga del DB
@@ -8,6 +9,10 @@ export interface IUtenteStaff {
   ruolo: string;
   password_hash: string;
 }
+
+// CHIAVE SEGRETA: Serve per firmare il token e impedire che venga falsificato.
+// (In un progetto lavorativo andrebbe in un file .env nascosto, per l'esame possiamo tenerla qui)
+const CHIAVE_SEGRETA = "token_pwd";
 
 // FUNZIONE PRINCIPALE DEL SERVICE
 export const verificaCredenziali = async (email: string, password_in_chiaro: string) => {
@@ -32,11 +37,23 @@ export const verificaCredenziali = async (email: string, password_in_chiaro: str
     throw new Error('Password errata.');
   }
 
-  // 5. Se arriviamo qui, il login è un successo! 
+  // 5. CREAZIONE DEL JWT (Il "Braccialetto VIP")
+  // Inseriamo dentro il token le informazioni base (mai la password!)
+  const payload = {
+    id: staff.id_staff,
+    email: staff.email,
+    ruolo: staff.ruolo
+  };
+
+  // Generiamo il token firmandolo con la chiave segreta, valido per 8 ore
+  const tokenGenerato = jwt.sign(payload, CHIAVE_SEGRETA, { expiresIn: '8h' });
+
+  // 6. Se arriviamo qui, il login è un successo! 
   // Restituiamo un oggetto pulito (NON restituiamo mai l'hash della password al frontend!)
   return {
     id: staff.id_staff,
     email: staff.email,
-    ruolo: staff.ruolo
+    ruolo: staff.ruolo,
+    token: tokenGenerato
   };
 };

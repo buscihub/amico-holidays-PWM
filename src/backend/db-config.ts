@@ -1,5 +1,6 @@
 import sqlite3, { Database } from 'sqlite3';
 import path from 'path';
+import bcrypt from 'bcrypt';
 
 let db: sqlite3.Database;
 
@@ -35,7 +36,22 @@ export const initDb = () => {
               email TEXT UNIQUE NOT NULL,
               password_hash TEXT NOT NULL,
               ruolo TEXT CHECK(ruolo IN ('host', 'cohost')) NOT NULL
-          )`);
+          )`, 
+          () => {
+              // SEEDING STAFF: Creiamo l'account admin di default (se non esiste già)
+              const emailAdmin = 'giuseppelia250728@gmail.com';
+              const passwordInChiaro = 'admin123';
+              
+              // Generiamo l'hash crittografato della password
+              const passwordHash = bcrypt.hashSync(passwordInChiaro, 10);
+
+              // Inseriamo l'utente ignorando l'errore se esiste già (grazie a UNIQUE su email)
+              const stmtStaff = db.prepare(`INSERT OR IGNORE INTO STAFF (email, password_hash, ruolo) VALUES (?, ?, 'host')`);
+              stmtStaff.run(emailAdmin, passwordHash);
+              stmtStaff.finalize();
+              
+              console.log('👤 Account Host verificato/creato (admin@amicos.it)');
+          });
 
     // Tabella ALLOGGIO (Pretoria, Massimo, Cattedrale)
     db.run(

@@ -11,4 +11,9 @@ router.get('/', AlloggiController.getAlloggi);
 router.put('/clean', AlloggiController.putClean);
 router.put('/clean/:id', AlloggiController.putClean); // Supporta anche l'ID direttamente nell'URL (es: /api/alloggi/clean/1)
 
+// PUT /api/alloggi/kit -> Inverte lo stato del kit benvenuto (accetta l'ID nel body o nell'URL)
+router.put('/kit', AlloggiController.putKit);
+router.put('/kit/:id', AlloggiController.putKit); // Es: /api/alloggi/kit/1
+
+
 export { router as alloggiRoutes };

@@ -37,3 +37,29 @@ export const aggiornaStatoPulizia = async (idAlloggio: number): Promise<IAlloggi
   
   return rows.length > 0 ? rows[0] : null;
 };
+
+export const aggiornaKitBenvenuto = async (idAlloggio: number): Promise<IAlloggio | null> => {
+
+  const updateSql =`
+
+    UPDATE ALLOGGIO
+    SET kit_benvenuto = CASE kit_benvenuto  WHEN 1 THEN 0 ELSE 1 END
+    WHERE id_alloggio = ?
+    `;
+
+  const result = await dbRun(updateSql, [idAlloggio]);
+
+    if (result.changes === 0){
+      return null
+    }
+
+   
+  const selectSql = 'SELECT * FROM ALLOGGIO WHERE id_alloggio = ?';
+  const rows = await dbAll<IAlloggio>(selectSql, [idAlloggio]);
+  
+  return rows.length > 0 ? rows[0] : null;
+  
+
+}
+
+

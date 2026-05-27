@@ -61,7 +61,49 @@ export const putClean = async (req: Request, res: Response): Promise<void> => {
   }
 };
     
+export const putKit = async(req: Request, res: Response):Promise<void> =>{
+  
+  try{
+  
+    const idParam = req.params['id'] || req.body.id_alloggio || req.body.id;
+    const idAlloggio = Number(idParam);
+  
+  
+    if (!idAlloggio || Number.isNaN(idAlloggio)) {
+      
+      res.status(400).json({ error: 'ID alloggio mancante o non valido.' });
+      return;
+    }
+    const KitAggiornato = await AlloggiService.aggiornaKitBenvenuto(idAlloggio);
+
+    if(!KitAggiornato){
+      
+      res.status(404).json({ error: 'Alloggio non trovato.' });
+      return;
     
+    }
+
+    res.status(200).json({
+
+      success: true,
+      message: "kit_benvenuto aggiornato con successo.",
+
+      data:{
+        id_alloggio: KitAggiornato.id_alloggio,
+        nome: KitAggiornato.nome_alloggio,
+        stato_pulizia: Boolean(KitAggiornato.stato_pulizia),
+        kit_benvenuto: Boolean(KitAggiornato.kit_benvenuto),
+        airbnb_url_id: KitAggiornato.link_airbnb || null,
+        ical_url: KitAggiornato.link_ical || null
+      },
+    });
+}
+catch(error: any) {
+    res.status(500).json({ error: error.message || 'Errore durante l\'aggiornamento del kit benvenuto.' });
+
+}
+
+}
     
 
 

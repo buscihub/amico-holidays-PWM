@@ -1,0 +1,34 @@
+<div style="text-align: center; margin-top: 50px; font-family: sans-serif;">
+  <h2>Accesso Host</h2>
+  <p>Amico's Holidays - Pannello di Gestione</p>
+
+  <div *ngIf="messaggioErrore" style="color: red; margin-bottom: 15px; font-weight: bold;">
+    {{ messaggioErrore }}
+  </div>
+
+  <form (ngSubmit)="eseguiLogin()">
+    
+    <div style="margin-bottom: 15px;">
+      <label>Email: </label><br>
+      <input 
+        type="email" 
+        name="email" 
+        [(ngModel)]="emailHost" 
+        placeholder="es: admin@amicos.it"
+        required>
+    </div>
+
+    <div style="margin-bottom: 15px;">
+      <label>Password: </label><br>
+      <input 
+        type="password" 
+        name="password" 
+        [(ngModel)]="passwordHost" 
+        placeholder="La tua password"
+        required>
+    </div>
+
+    <button type="submit" style="padding: 10px 20px; cursor: pointer;">Accedi</button>
+    
+  </form>
+</div>

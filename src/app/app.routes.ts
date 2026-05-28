@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { LoginComponent } from './login/login.component';
+import { LoginComponent } from './components/login/login.component';
 
 export const routes: Routes = [
   // Quando andiamo su /login, mostra la Cassiera

@@ -1,5 +1,10 @@
 import { Routes } from '@angular/router';
 import { LoginComponent } from './components/login/login.component';
+import { LayoutComponent } from './components/layout/layout.component';
+import { DashboardComponent } from './components/dashboard/dashboard.component';
+import { AlloggiComponent } from './components/alloggi/alloggi.component';
+import { OsservatorioComponent } from './components/osservatorio/osservatorio.component';
+import { AutenticazioneGuard } from './guards/autenticazione.guard';
 
 export const routes: Routes = [
   // Rotta pubblica per il login

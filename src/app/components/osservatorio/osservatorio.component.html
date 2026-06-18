@@ -1,0 +1,148 @@
+<section style="max-width: 1200px; margin: 40px auto; padding: 0 20px; font-family: sans-serif;">
+  <header style="display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px;">
+    <div>
+      <h2 style="margin: 0 0 6px;">Osservatorio</h2>
+      <p style="margin: 0; color: #555;">Gestisci gli ospiti da inviare e consulta lo storico.</p>
+    </div>
+
+    <button
+      type="button"
+      (click)="caricaOspiti()"
+      [disabled]="caricamento || confermaInCorso"
+      style="padding: 10px 16px; cursor: pointer;">
+      {{ caricamento ? 'Caricamento...' : 'Aggiorna lista' }}
+    </button>
+  </header>
+
+  <form
+    (ngSubmit)="applicaFiltri()"
+    style="display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 20px;">
+    <label style="display: flex; flex-direction: column; gap: 6px;">
+      <span>Stato</span>
+      <select
+        name="stato"
+        [(ngModel)]="filtroStato"
+        style="padding: 9px 10px;">
+        <option [ngValue]="0">Da segnare</option>
+        <option [ngValue]="1">Gia segnati</option>
+      </select>
+    </label>
+
+    <label style="display: flex; flex-direction: column; gap: 6px;">
+      <span>Mese</span>
+      <input
+        type="text"
+        name="mese"
+        [(ngModel)]="filtroMese"
+        placeholder="es. 06"
+        maxlength="2"
+        style="padding: 9px 10px; width: 90px;">
+    </label>
+
+    <label style="display: flex; flex-direction: column; gap: 6px;">
+      <span>Anno</span>
+      <input
+        type="text"
+        name="anno"
+        [(ngModel)]="filtroAnno"
+        placeholder="es. 2026"
+        maxlength="4"
+        style="padding: 9px 10px; width: 110px;">
+    </label>
+
+    <button
+      type="submit"
+      [disabled]="caricamento || confermaInCorso"
+      style="padding: 10px 16px; cursor: pointer;">
+      Applica filtri
+    </button>
+
+    <button
+      type="button"
+      (click)="mostraDaSegnare()"
+      [disabled]="caricamento || confermaInCorso"
+      style="padding: 10px 16px; cursor: pointer;">
+      Da segnare
+    </button>
+
+    <button
+      type="button"
+      (click)="mostraStorico()"
+      [disabled]="caricamento || confermaInCorso"
+      style="padding: 10px 16px; cursor: pointer;">
+      Storico
+    </button>
+  </form>
+
+  <div *ngIf="messaggioErrore" style="color: red; margin-bottom: 16px; font-weight: bold;">
+    {{ messaggioErrore }}
+  </div>
+
+  <div *ngIf="messaggioSuccesso" style="color: green; margin-bottom: 16px; font-weight: bold;">
+    {{ messaggioSuccesso }}
+  </div>
+
+  <div
+    *ngIf="filtroStato === 0 && ospiti.length > 0"
+    style="display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px;">
+    <strong>Selezionati: {{ numeroSelezionati }}</strong>
+
+    <button
+      type="button"
+      (click)="confermaSelezionati()"
+      [disabled]="numeroSelezionati === 0 || caricamento || confermaInCorso"
+      style="padding: 10px 16px; cursor: pointer;">
+      {{ confermaInCorso ? 'Conferma in corso...' : 'Conferma selezionati' }}
+    </button>
+  </div>
+
+  <div *ngIf="caricamento" style="padding: 20px; border: 1px solid #ddd;">
+    Recupero degli ospiti in corso...
+  </div>
+
+  <div *ngIf="!caricamento && ospiti.length === 0" style="padding: 20px; border: 1px solid #ddd;">
+    Nessun ospite disponibile.
+  </div>
+
+  <table
+    *ngIf="!caricamento && ospiti.length > 0"
+    style="width: 100%; border-collapse: collapse; background: white;">
+    <thead>
+      <tr style="background: #f2f2f2;">
+        <th *ngIf="filtroStato === 0" style="padding: 12px; border: 1px solid #ddd; text-align: left;">
+          <input
+            type="checkbox"
+            [checked]="tuttiSelezionati"
+            (change)="selezionaTutti($event)"
+            aria-label="Seleziona tutti">
+        </th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Ospite</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Alloggio</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Sesso</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Cittadinanza</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Residenza</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Check-in</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Permanenza</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr *ngFor="let ospite of ospiti">
+        <td *ngIf="filtroStato === 0" style="padding: 12px; border: 1px solid #ddd;">
+          <input
+            type="checkbox"
+            [checked]="isSelezionato(ospite.id_soggiorno)"
+            (change)="cambiaSelezione(ospite.id_soggiorno, $event)"
+            [attr.aria-label]="'Seleziona ospite ' + ospite.id_cliente">
+        </td>
+        <td style="padding: 12px; border: 1px solid #ddd;">#{{ ospite.id_cliente }}</td>
+        <td style="padding: 12px; border: 1px solid #ddd;">{{ ospite.nome_alloggio }}</td>
+        <td style="padding: 12px; border: 1px solid #ddd;">{{ ospite.sesso }}</td>
+        <td style="padding: 12px; border: 1px solid #ddd;">{{ ospite.cittadinanza }}</td>
+        <td style="padding: 12px; border: 1px solid #ddd;">{{ ospite.luogo_residenza }}</td>
+        <td style="padding: 12px; border: 1px solid #ddd;">{{ ospite.data_check_in | date: 'dd/MM/yyyy' }}</td>
+        <td style="padding: 12px; border: 1px solid #ddd;">{{ ospite.permanenza }} giorni</td>
+      </tr>
+    </tbody>
+  </table>
+</section>

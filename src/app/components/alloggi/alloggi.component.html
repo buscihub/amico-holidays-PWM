@@ -1,0 +1,88 @@
+<section style="max-width: 1100px; margin: 40px auto; padding: 0 20px; font-family: sans-serif;">
+  <header style="display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 24px;">
+    <div>
+      <h2 style="margin: 0 0 6px;">Gestione alloggi</h2>
+      <p style="margin: 0; color: #555;">Consulta gli alloggi e aggiorna pulizia e kit di benvenuto.</p>
+    </div>
+
+    <button
+      type="button"
+      (click)="caricaAlloggi()"
+      [disabled]="caricamento"
+      style="padding: 10px 16px; cursor: pointer;">
+      {{ caricamento ? 'Caricamento...' : 'Aggiorna lista' }}
+    </button>
+  </header>
+
+  <div *ngIf="messaggioErrore" style="color: red; margin-bottom: 16px; font-weight: bold;">
+    {{ messaggioErrore }}
+  </div>
+
+  <div *ngIf="caricamento" style="padding: 20px; border: 1px solid #ddd;">
+    Recupero degli alloggi in corso...
+  </div>
+
+  <div *ngIf="!caricamento && alloggi.length === 0" style="padding: 20px; border: 1px solid #ddd;">
+    Nessun alloggio disponibile.
+  </div>
+
+  <table
+    *ngIf="!caricamento && alloggi.length > 0"
+    style="width: 100%; border-collapse: collapse; background: white;">
+    <thead>
+      <tr style="background: #f2f2f2;">
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">ID</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Nome</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Pulizia</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Kit benvenuto</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Airbnb</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">iCal</th>
+        <th style="padding: 12px; border: 1px solid #ddd; text-align: left;">Azioni</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      <tr *ngFor="let alloggio of alloggi">
+        <td style="padding: 12px; border: 1px solid #ddd;">{{ alloggio.id_alloggio }}</td>
+        <td style="padding: 12px; border: 1px solid #ddd;">{{ alloggio.nome }}</td>
+        <td style="padding: 12px; border: 1px solid #ddd;">
+          <strong [style.color]="alloggio.stato_pulizia ? 'green' : 'darkorange'">
+            {{ alloggio.stato_pulizia ? 'Pulito' : 'Da pulire' }}
+          </strong>
+        </td>
+        <td style="padding: 12px; border: 1px solid #ddd;">
+          <strong [style.color]="alloggio.kit_benvenuto ? 'green' : 'darkorange'">
+            {{ alloggio.kit_benvenuto ? 'Preparato' : 'Da preparare' }}
+          </strong>
+        </td>
+        <td style="padding: 12px; border: 1px solid #ddd;">
+          <span *ngIf="alloggio.airbnb_url_id; else airbnbMancante">
+            {{ alloggio.airbnb_url_id }}
+          </span>
+          <ng-template #airbnbMancante>-</ng-template>
+        </td>
+        <td style="padding: 12px; border: 1px solid #ddd;">
+          <a *ngIf="alloggio.ical_url; else icalMancante" [href]="alloggio.ical_url" target="_blank" rel="noopener">
+            Apri calendario
+          </a>
+          <ng-template #icalMancante>-</ng-template>
+        </td>
+        <td style="padding: 12px; border: 1px solid #ddd;">
+          <button
+            type="button"
+            (click)="aggiornaPulizia(alloggio.id_alloggio)"
+            style="margin-right: 8px; padding: 8px 10px; cursor: pointer;">
+            {{ alloggio.stato_pulizia ? 'Segna da pulire' : 'Segna pulito' }}
+          </button>
+
+          <button
+            type="button"
+            (click)="aggiornaKit(alloggio.id_alloggio)"
+            style="padding: 8px 10px; cursor: pointer;">
+            {{ alloggio.kit_benvenuto ? 'Kit da preparare' : 'Kit preparato' }}
+          </button>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</section>

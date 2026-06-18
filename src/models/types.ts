@@ -59,3 +59,28 @@ export interface DashboardStats {
   inPartenza: number;
   checkOutDaFare: number;
 }
+
+// Enum per mappare in modo pulito i tipi di transazione
+export enum TipoTransazione {
+  ENTRATA = 'Entrata',
+  USCITA = 'Uscita'
+}
+
+// Enum per la provenienza del dato
+export enum SorgenteTransazione {
+  AIRBNB_CSV = 'Import_Airbnb',
+  MANUALE = 'Manuale'
+}
+
+// L'interfaccia principale della Transazione che useremo in tutto il backend
+export interface Transazione {
+  id_transazione?: number; // Opzionale perché lo genera SQLite (Autoincrement)
+  id_alloggio: number | null; // Nullable perché alcune spese potrebbero essere generali per il B&B
+  data_transazione: string; // Formato YYYY-MM-DD
+  tipo: TipoTransazione;
+  categoria: string; // Es. 'Prenotazione', 'Ritenuta Fiscale', 'Pulizie', 'Bollette'
+  importo: number;
+  descrizione: string; // Es. Nome ospite e codice conferma, o nota spesa
+  sorgente: SorgenteTransazione;
+  codice_conferma_airbnb?: string; // Utile per non importare due volte lo stesso soggiorno
+}

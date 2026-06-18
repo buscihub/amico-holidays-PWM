@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 import { Router } from '@angular/router';
-import { Auth } from '../../services/auth.service';
+import { AutenticazioneService } from '../../services/autenticazione.service';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 
@@ -21,13 +21,13 @@ export class LoginComponent {
 
   // Chiamiamo il "Fattorino" (AuthService) e il "Navigatore" (Router)
   constructor(
-    private auth: Auth,
+    private autenticazione: AutenticazioneService,
     private router: Router
   ) {}
 
   // Funzione che scatta quando si preme il tasto "Accedi"
   eseguiLogin() {
-    this.auth.login(this.emailHost, this.passwordHost).subscribe({
+    this.autenticazione.login(this.emailHost, this.passwordHost).subscribe({
       next: (risposta: any) => {
         console.log('Login OK!', risposta);
         
@@ -36,8 +36,8 @@ export class LoginComponent {
         
         alert('Accesso eseguito con successo!');
         
-        // Più tardi sbloccheremo questa riga per cambiare pagina
-        // this.router.navigate(['/dashboard']); 
+        // Cambiamo pagina indirizzando l'utente alla dashboard
+        this.router.navigate(['/app/dashboard']); 
       },
       error: (errore) => {
         console.error('Errore Login:', errore);

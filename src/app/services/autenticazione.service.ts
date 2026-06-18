@@ -4,7 +4,7 @@ import { HttpClient } from '@angular/common/http';
 @Injectable({
   providedIn: 'root'
 })
-export class Auth {
+export class AutenticazioneService {
   // L'indirizzo del nostro backend che abbiamo completato!
   private apiUrl = 'http://localhost:4000/api/auth/login';
 

@@ -1,7 +1,7 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
 
-export const autenticazioneGuard: CanActivateFn = (route, state) => {
+export const AutenticazioneGuard: CanActivateFn = (route, state) => {
   const router = inject(Router);
   
   // Controlliamo se c'è un token salvato nel localStorage (il "braccialetto" VIP)

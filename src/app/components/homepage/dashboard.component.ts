@@ -3,13 +3,13 @@ import { CommonModule } from '@angular/common';
 import { PrenotazioniService } from '../../services/prenotazioni.service';
 
 @Component({
-  selector: 'app-dashboard',
+  selector: 'app-homepage',
   standalone: true,
   imports: [CommonModule],
-  templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.scss']
+  templateUrl: './homepage.component.html',
+  styleUrls: ['./homepage.component.scss']
 })
-export class DashboardComponent implements OnInit {
+export class HomepageComponent implements OnInit {
   statistiche: any = null;
   errore: string = '';
 
@@ -20,13 +20,15 @@ export class DashboardComponent implements OnInit {
   }
 
   caricaStatistiche() {
+    // Ho lasciato getDashboardStats() ipotizzando che l'API si chiami ancora così,
+    // ma puoi rinominare anche quello nel servizio se preferisci.
     this.prenotazioniService.getDashboardStats().subscribe({
       next: (dati) => {
         this.statistiche = dati;
       },
       error: (err) => {
         console.error('Errore nel recupero delle statistiche', err);
-        this.errore = 'Impossibile caricare le statistiche della dashboard.';
+        this.errore = 'Impossibile caricare le statistiche della homepage.';
       }
     });
   }

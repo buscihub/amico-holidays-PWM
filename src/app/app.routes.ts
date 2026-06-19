@@ -18,14 +18,14 @@ export const routes: Routes = [
     children: [
       { path: 'dashboard', component: HomepageComponent },
       // Se l'utente va su /app, lo rimandiamo di default alla dashboard
-      { path: '', redirectTo: 'dashboard', pathMatch: 'full' }
+      { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
+      {path : 'alloggi', component: AlloggiComponent},
+      {path : 'osservatorio', component: OsservatorioComponent}
+
     ]
   },
 
   // Se l'indirizzo è vuoto, rimanda subito al login
   { path: '', redirectTo: 'login', pathMatch: 'full' },
-
-  {path : 'alloggi', component: AlloggiComponent},
-  {path : 'osservatorio', component: OsservatorioComponent}
 
 ];

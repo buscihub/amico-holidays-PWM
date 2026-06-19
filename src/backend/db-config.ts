@@ -1,6 +1,7 @@
 import sqlite3, { Database } from 'sqlite3';
 import path from 'path';
 import bcrypt from 'bcrypt';
+import { dbRun } from './utils/db.util';
 
 let db: sqlite3.Database;
 
@@ -114,7 +115,21 @@ export const initDb = () => {
               permanenza INTEGER,
               FOREIGN KEY(id_soggiorno) REFERENCES SOGGIORNI(id_soggiorno)
           )`);
-
+    
+    db.run(`
+    CREATE TABLE IF NOT EXISTS TRANSAZIONI (
+    ID_Transazione INTEGER PRIMARY KEY AUTOINCREMENT,
+    ID_Alloggio INTEGER,
+    Data_Transazione DATE NOT NULL,
+    Tipo TEXT NOT NULL CHECK(Tipo IN ('Entrata', 'Uscita')),
+    Categoria TEXT NOT NULL,
+    Importo REAL NOT NULL,
+    Descrizione TEXT,
+    Sorgente TEXT NOT NULL CHECK(Sorgente IN ('Import_Airbnb', 'Manuale')),
+    Codice_Conferma_Airbnb TEXT,
+    FOREIGN KEY (ID_Alloggio) REFERENCES ALLOGGIO(ID_Alloggio)
+  );
+`)
     console.log('🚀 Tabelle del database create/verificate.');
   });
 };

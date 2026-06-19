@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-// DEVE essere la stessa chiave usata nel file autenticazione.service.ts
+// deve essere la stessa chiave usata nel file autenticazione.service.ts
 const CHIAVE_SEGRETA = "token_pwd"; 
 
-// Siccome TypeScript è rigoroso, creiamo un'interfaccia personalizzata
+// creiamo un'interfaccia personalizzata
 // per dire che la nostra Request conterrà anche i dati dell'utente.
 export interface CustomRequest extends Request {
     utente?: any;

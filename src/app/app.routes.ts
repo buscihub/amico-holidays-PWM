@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 import { LoginComponent } from './components/login/login.component';
 import { LayoutComponent } from './components/layout/layout.component';
-import { HomepageComponent } from './components/homepage/homepage.component';
+import { HomepageComponent } from './components/homepage/dashboard.component';
 import { AlloggiComponent } from './components/alloggi/alloggi.component';
 import { OsservatorioComponent } from './components/osservatorio/osservatorio.component';
 import { AutenticazioneGuard } from './guards/autenticazione.guard';

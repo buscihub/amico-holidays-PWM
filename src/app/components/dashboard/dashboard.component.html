@@ -1,0 +1,26 @@
+<div class="dashboard-container">
+  <h1>Homepage Host</h1>
+  
+  <div *ngIf="errore" class="errore">
+    {{ errore }}
+  </div>
+
+  <!-- Mostriamo i quadrotti solo quando i dati sono stati caricati -->
+  <div *ngIf="statistiche" class="stats-grid">
+    
+    <div class="stat-card">
+      <h3>Camere Occupate</h3>
+      <p class="stat-value">{{ statistiche.camereOccupate || 0 }}</p>
+    </div>
+
+    <div class="stat-card">
+      <h3>Arrivi Oggi</h3>
+      <p class="stat-value">{{ statistiche.inArrivo || 0 }}</p>
+    </div>
+
+    <div class="stat-card">
+      <h3>Partenze Oggi</h3>
+      <p class="stat-value">{{ statistiche.inPartenza || 0 }}</p>
+    </div>
+  </div>
+</div>

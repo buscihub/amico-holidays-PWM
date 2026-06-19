@@ -50,7 +50,7 @@ export const aggiornaKitBenvenuto = async (idAlloggio: number): Promise<IAlloggi
   const result = await dbRun(updateSql, [idAlloggio]);
 
     if (result.changes === 0){
-      return null
+      return null;
     }
 
    

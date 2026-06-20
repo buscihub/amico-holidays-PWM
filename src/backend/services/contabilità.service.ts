@@ -34,11 +34,11 @@ export const elaboraCSV = async (filePath: string): Promise<{ inserite: number; 
     fs.createReadStream(filePath)
       .pipe(csvParser()) // Il file passa nella pipeline del parser che lo converte in oggetti JS
       .on('data', (riga) => {
-        // Validazione minima: se mancano colonne essenziali salta la riga
-        if (!riga.Importo || !riga.Data || !riga.Tipo) return;
-        
-        // Saltiamo i Payout (i bonifici aggregati) per evitare di raddoppiare i conteggi dei ricavi
+        // 1. SCUDO: Saltiamo PRIMA i flussi "Payout" aggregati (che hanno l'importo vuoto nel CSV)
         if (riga.Tipo === 'Payout') return;
+        
+        // 2. Validazione minima: se mancano colonne essenziali salta la riga
+        if (!riga.Importo || !riga.Data || !riga.Tipo) return;
 
         risultatiRaw.push(riga);
       })
@@ -67,8 +67,8 @@ export const elaboraCSV = async (filePath: string): Promise<{ inserite: number; 
             // SCUDO ANTI-DUPLICATI: Interroghiamo dbGet per vedere se questa riga è già stata salvata
             if (codiceConferma) {
               const giaEsistente = await dbGet(
-                `SELECT id_transazione FROM TRANSAZIONI 
-                 WHERE codice_conferma_airbnb = ? AND categoria = ? AND sorgente = ?`,
+                `SELECT ID_Transazione FROM TRANSAZIONI 
+                 WHERE Codice_Conferma_Airbnb = ? AND Categoria = ? AND Sorgente = ?`,
                 [codiceConferma, categoria, SorgenteTransazione.AIRBNB_CSV]
               );
 
@@ -78,13 +78,14 @@ export const elaboraCSV = async (filePath: string): Promise<{ inserite: number; 
               }
             }
 
+            // Mappiamo l'ID corretto (Risolve il bug di "Cathedral's room" -> Cattedrale nel DB)
             const idAlloggio = mappaAlloggio(riga.Annuncio);
             const importoAssoluto = Math.abs(importoPulito); // Salviamo il valore economico sempre positivo
             const descrizione = `${riga.Tipo} - ${riga.Ospite || 'N/D'}`;
 
-            // Esecuzione dell'inserimento effettivo tramite dbRun
+            // Esecuzione dell'inserimento effettivo (Coordinato con le maiuscole/minuscole del tuo initDb)
             await dbRun(
-              `INSERT INTO TRANSAZIONI (id_alloggio, data_transazione, tipo, categoria, importo, descrizione, sorgente, codice_conferma_airbnb)
+              `INSERT INTO TRANSAZIONI (ID_Alloggio, Data_Transazione, Tipo, Categoria, Importo, Descrizione, Sorgente, Codice_Conferma_Airbnb)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
               [idAlloggio, dataFormattata, tipo, categoria, importoAssoluto, descrizione, SorgenteTransazione.AIRBNB_CSV, codiceConferma]
             );
@@ -122,7 +123,7 @@ export const inserisciTransazioneManuale = async (
   transazione: Omit<Transazione, 'id_transazione' | 'sorgente' | 'codice_conferma_airbnb'>
 ): Promise<{ id_inserito: number }> => {
   const query = `
-    INSERT INTO TRANSAZIONI (id_alloggio, data_transazione, tipo, categoria, importo, descrizione, sorgente)
+    INSERT INTO TRANSAZIONI (ID_Alloggio, Data_Transazione, Tipo, Categoria, Importo, Descrizione, Sorgente)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `;
 
@@ -141,21 +142,20 @@ export const inserisciTransazioneManuale = async (
 
 /**
  * 3. MATRICE PIVOT INCROCIATA (Alloggio vs Categoria)
- * Genera un report bidimensionale aggregato. Ottimo per visualizzare su Angular quanto incide
- * una specifica categoria (es. Tasse o Pulizie) su ogni singola stanza e sulle spese generali.
+ * Report bidimensionale aggregato per le tabelle di Angular.
  */
 export const recuperaMatriceCostiIncrociati = async (): Promise<any[]> => {
   const query = `
     SELECT 
-      T.categoria,
-      SUM(CASE WHEN T.id_alloggio = 1 THEN T.importo ELSE 0 END) as costo_pretoria,
-      SUM(CASE WHEN T.id_alloggio = 2 THEN T.importo ELSE 0 END) as costo_massimo,
-      SUM(CASE WHEN T.id_alloggio = 3 THEN T.importo ELSE 0 END) as costo_cattedrale,
-      SUM(CASE WHEN T.id_alloggio IS NULL THEN T.importo ELSE 0 END) as costo_generale,
-      SUM(T.importo) as totale_complessivo_categoria
+      T.Categoria,
+      SUM(CASE WHEN T.ID_Alloggio = 1 THEN T.Importo ELSE 0 END) as costo_pretoria,
+      SUM(CASE WHEN T.ID_Alloggio = 2 THEN T.Importo ELSE 0 END) as costo_massimo,
+      SUM(CASE WHEN T.ID_Alloggio = 3 THEN T.Importo ELSE 0 END) as costo_cattedrale,
+      SUM(CASE WHEN T.ID_Alloggio IS NULL THEN T.Importo ELSE 0 END) as costo_generale,
+      SUM(T.Importo) as totale_complessivo_categoria
     FROM TRANSAZIONI T
-    WHERE T.tipo = 'Uscita'
-    GROUP BY T.categoria
+    WHERE T.Tipo = 'Uscita'
+    GROUP BY T.Categoria
     ORDER BY totale_complessivo_categoria DESC
   `;
   return await dbAll<any>(query);
@@ -163,99 +163,88 @@ export const recuperaMatriceCostiIncrociati = async (): Promise<any[]> => {
 
 /**
  * 4. PERFORMANCE GLOBALE ALLOGGI (P&L Dashboard)
- * Calcola Ricavi totali, Costi totali, Guadagno Netto reale e Margine di Profitto percentuale
- * per ognuna delle tre strutture, mettendo a confronto l'impatto economico reale di gestione.
+ * Allineato con la tabella unificata al singolare 'ALLOGGIO'.
  */
 export const recuperaPerformanceAlloggi = async (): Promise<any[]> => {
   const query = `
     SELECT 
-      T.id_alloggio,
+      T.ID_Alloggio,
       IFNULL(A.nome_alloggio, 'Spese Generali') as nome_alloggio,
-      SUM(CASE WHEN T.tipo = 'Entrata' THEN T.importo ELSE 0 END) as ricavi_totali,
-      SUM(CASE WHEN T.tipo = 'Uscita' THEN T.importo ELSE 0 END) as costi_totali,
-      (SUM(CASE WHEN T.tipo = 'Entrata' THEN T.importo ELSE 0 END) - 
-       SUM(CASE WHEN T.tipo = 'Uscita' THEN T.importo ELSE 0 END)) as utile_netto,
+      SUM(CASE WHEN T.Tipo = 'Entrata' THEN T.Importo ELSE 0 END) as ricavi_totali,
+      SUM(CASE WHEN T.Tipo = 'Uscita' THEN T.Importo ELSE 0 END) as costi_totali,
+      (SUM(CASE WHEN T.Tipo = 'Entrata' THEN T.Importo ELSE 0 END) - 
+       SUM(CASE WHEN T.Tipo = 'Uscita' THEN T.Importo ELSE 0 END)) as utile_netto,
       CASE 
-        WHEN SUM(CASE WHEN T.tipo = 'Entrata' THEN T.importo ELSE 0 END) > 0 
-        THEN ROUND(((SUM(CASE WHEN T.tipo = 'Entrata' THEN T.importo ELSE 0 END) - SUM(CASE WHEN T.tipo = 'Uscita' THEN T.importo ELSE 0 END)) / SUM(CASE WHEN T.tipo = 'Entrata' THEN T.importo ELSE 0 END)) * 100, 2)
+        WHEN SUM(CASE WHEN T.Tipo = 'Entrata' THEN T.Importo ELSE 0 END) > 0 
+        THEN ROUND(((SUM(CASE WHEN T.Tipo = 'Entrata' THEN T.Importo ELSE 0 END) - SUM(CASE WHEN T.Tipo = 'Uscita' THEN T.Importo ELSE 0 END)) / SUM(CASE WHEN T.Tipo = 'Entrata' THEN T.Importo ELSE 0 END)) * 100, 2)
         ELSE 0 
       END as margine_profitto_percentuale
     FROM TRANSAZIONI T
-    LEFT JOIN ALLOGGIO A ON T.id_alloggio = A.id_alloggio
-    GROUP BY T.id_alloggio
+    LEFT JOIN ALLOGGIO A ON T.ID_Alloggio = A.id_alloggio
+    GROUP BY T.ID_Alloggio
   `;
   return await dbAll<any>(query);
 };
 
 /**
  * 5. IMPATTO PERCENTUALE DELLE CATEGORIE (Pie Chart Data)
- * Sfrutta le Common Table Expressions (CTE) per estrarre la percentuale di incidenza
- * di ogni categoria di costo sul totale complessivo delle uscite dell'attività.
  */
 export const recuperaImpattoCategorieCosti = async (): Promise<any[]> => {
   const query = `
     WITH TotaleUscite AS (
-      SELECT SUM(importo) as totale_globale FROM TRANSAZIONI WHERE tipo = 'Uscita'
+      SELECT SUM(Importo) as totale_globale FROM TRANSAZIONI WHERE Tipo = 'Uscita'
     )
     SELECT 
-      T.categoria,
-      SUM(T.importo) as totale_categoria,
-      ROUND((SUM(T.importo) / (SELECT totale_globale FROM TotaleUscite)) * 100, 2) as percentuale_incidenza
+      T.Categoria,
+      SUM(T.Importo) as totale_categoria,
+      ROUND((SUM(T.Importo) / (SELECT totale_globale FROM TotaleUscite)) * 100, 2) as percentuale_incidenza
     FROM TRANSAZIONI T
-    WHERE T.tipo = 'Uscita'
-    GROUP BY T.categoria
+    WHERE T.Tipo = 'Uscita'
+    GROUP BY T.Categoria
     ORDER BY totale_categoria DESC
   `;
   return await dbAll<any>(query);
 };
 
 /**
- * 6. FILTRI INCROCIATI DINAMICI MULTI-CATEGORIA (Query di Ricerca Avanzata)
- * Permette ad Angular di richiedere record specifici incrociando una stanza e MULTIPLE categorie.
- * Es: Estrai le transazioni di Massimo Room (ID 2) che appartengono a 'Tasse', 'Colazione' o 'Pulizie'.
+ * 6. FILTRI INCROCIATI DINAMICI MULTI-CATEGORIA
  */
 export const filtraTransazioniIncrociate = async (
   idAlloggio?: number | null, 
-  categories?: string[] // Modificato: ora accetta un array di stringhe!
+  categories?: string[]
 ): Promise<any[]> => {
   let query = `
     SELECT T.*, IFNULL(A.nome_alloggio, 'Spesa Generale') as nome_alloggio 
     FROM TRANSAZIONI T
-    LEFT JOIN ALLOGGIO A ON T.id_alloggio = A.id_alloggio
+    LEFT JOIN ALLOGGIO A ON T.ID_Alloggio = A.id_alloggio
     WHERE 1=1
   `;
   const params: any[] = [];
 
-  // Filtro per Alloggio specifico
   if (idAlloggio !== undefined) {
-    query += ` AND T.id_alloggio = ?`;
+    query += ` AND T.ID_Alloggio = ?`;
     params.push(idAlloggio);
   }
 
-  // MODIFICA AVANZATA: Filtro per gruppo di categorie (Costruisce dinamicamente il costrutto SQL IN)
   if (categories && categories.length > 0) {
-    // Genera tanti punti interrogativi quanti sono gli elementi dell'array (es. "?, ?, ?")
     const placeholders = categories.map(() => '?').join(', ');
-    query += ` AND T.categoria IN (${placeholders})`;
-    
-    // Iniettiamo i valori reali dell'array dentro i parametri della query
+    query += ` AND T.Categoria IN (${placeholders})`;
     categories.forEach(cat => params.push(cat));
   }
 
-  query += ` ORDER BY T.data_transazione DESC`;
+  query += ` ORDER BY T.Data_Transazione DESC`;
   return await dbAll<any>(query, params);
 };
 
 /**
  * 7. STORICO MOVIMENTI COMPLETO
- * Estrae l'elenco cronologico di tutte le transazioni (Entrate e Uscite) presenti a database.
  */
 export const recuperaTuttiIMovimenti = async (): Promise<any[]> => {
   const query = `
     SELECT T.*, IFNULL(A.nome_alloggio, 'Spesa Generale') as nome_alloggio 
     FROM TRANSAZIONI T
-    LEFT JOIN ALLOGGIO A ON T.id_alloggio = A.id_alloggio
-    ORDER BY T.data_transazione DESC
+    LEFT JOIN ALLOGGIO A ON T.ID_Alloggio = A.id_alloggio
+    ORDER BY T.Data_Transazione DESC
   `;
   return await dbAll<any>(query);
 };

@@ -8,6 +8,7 @@ import { alloggiRoutes } from './routes/alloggi.routes';
 import { osservatorioRoutes } from './routes/osservatorio.routes'; 
 import { default as autenticazioneRoutes } from './routes/autenticazione.routes'; 
 import { startSincJob } from './crons/ical.cron'; 
+import { default as contabilitaRoutes } from './routes/contabilita.routes'; // 👈 AGGIUNGI QUESTO!
 
 const app = express();
 
@@ -37,6 +38,13 @@ app.use('/api/alloggi', alloggiRoutes);
 // URL Finale: GET http://localhost:4000/api/osservatorio
 app.use('/api/osservatorio', osservatorioRoutes); 
 
+// Rotte dell'Osservatorio Turistico
+// URL Finale: GET http://localhost:4000/api/osservatorio
+app.use('/api/osservatorio', osservatorioRoutes); 
+
+// Rotte della Gestione Contabile & Finanziaria (CSV e Spese Manuali)
+// URL Finale: POST http://localhost:4000/api/contabilita/upload-csv
+app.use('/api/contabilita', contabilitaRoutes); // 👈 AGGIUNGI QUESTO!
 
 // Rotta di test globale per verificare se il server risponde
 app.get('/', (req, res) => {
